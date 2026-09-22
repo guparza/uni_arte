@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UniArte - Catálogo de Artículos</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Estilo para fijar la cabecera de la tabla al hacer scroll -->
+  <style>
+    .tabla-contenedor {
+      max-height: 70vh; /* Altura máxima fija para la tabla */
+      overflow-y: auto;  /* Permite scroll vertical interno */
+    }
+    .tabla-contenedor thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;       /* Mantiene los títulos por encima del contenido */
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+  <div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>📦 Catálogo de Artículos</h2>
+      <button class="btn btn-primary" id="btnNuevo">➕ Nuevo Artículo</button>
+    </div>
+
+    <!-- Barra de Búsqueda -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <input 
+          type="text" 
+          id="inputBuscar" 
+          class="form-control" 
+          placeholder="🔍 Buscar por código o descripción..."
+        >
+      </div>
+    </div>
+
+    <!-- Tabla de artículos con cabecera congelada -->
+<div class="card shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive tabla-contenedor">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th style="width: 60px;" class="text-center">Foto</th>
+            <th>Código</th>
+            <th>Descripción</th>
+            <th>Rubro</th>
+            <th>Precio Venta</th>
+            <th>Maneja Stock</th>
+            <th>Stock Crítico</th>
+            <th class="text-center">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tablaArticulos">
+          <tr>
+            <td colspan="8" class="text-center text-muted py-3">Cargando artículos...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+  <!-- Modal Scrollable con cabecera y pie fijos -->
+  <div class="modal fade" id="modalArticulo" tabindex="-1" aria-labelledby="modalArticuloLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white py-2">
+          <h5 class="modal-title fs-6 fw-bold" id="modalArticuloLabel">➕ Nuevo Artículo</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="formArticulo" class="d-flex flex-column h-100">
+          <div class="modal-body py-2">
+            
+            <!-- SECCIÓN 1: Clasificación, Codificación y Foto -->
+            <div class="text-primary fw-bold small mb-2 pb-1 border-bottom">
+              1. Clasificación y Codificación
+            </div>
+            <div class="row g-2 mb-2 align-items-center">
+              <div class="col-md-9">
+                <div class="row g-2">
+                  <div class="col-md-6">
+                    <label for="rubro" class="form-label small fw-bold mb-1">Rubro (*)</label>
+                    <select class="form-select form-select-sm" id="rubro" required>
+                      <option value="0">Cargando rubros...</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label for="codigo_prefijo" class="form-label small mb-1">Prefijo</label>
+                    <input type="text" class="form-control form-control-sm" id="codigo_prefijo" placeholder="Ej: FA" maxlength="25">
+                  </div>
+                  <div class="col-md-3">
+                    <label for="codigo_sufijo" class="form-label small mb-1">Sufijo </label>
+                    <input type="text" class="form-control form-control-sm" id="codigo_sufijo" placeholder="Ej: 003" maxlength="25">
+                  </div>
+                  <div class="col-md-12">
+                    <label for="codigo" class="form-label small mb-1">Código Final Generado (*)</label>
+                    <input type="text" class="form-control form-control-sm bg-light fw-bold text-primary" id="codigo" required readonly placeholder="Código automático">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Vista previa y selector de Foto -->
+              <div class="col-md-3 text-center">
+                <label class="form-label small fw-bold mb-1 d-block">Foto Producto</label>
+                <div class="border rounded p-1 bg-white d-flex align-items-center justify-content-center mb-1" style="height: 75px;">
+                  <img id="imgPreview" src="" alt="Vista previa" class="img-fluid rounded" style="max-height: 65px; object-fit: contain;">
+                </div>
+                <input type="file" class="form-control form-control-sm" id="inputFoto" accept="image/*">
+              </div>
+            </div>
+
+            <!-- SECCIÓN 2: Datos Comerciales -->
+            <div class="text-primary fw-bold small mb-2 pb-1 border-bottom">
+              2. Datos Comerciales
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-8">
+                <label for="descripcion" class="form-label small fw-bold mb-1">Descripción (*)</label>
+                <input type="text" class="form-control form-control-sm" id="descripcion" required maxlength="255" placeholder="Ej: Exhibidor Golosinero 3 Estantes">
+              </div>
+              <div class="col-md-4">
+                <label for="precio_venta" class="form-label small mb-1">Precio de Venta</label>
+                <div class="input-group input-group-sm">
+                  <span class="input-group-text">$</span>
+                  <input type="number" step="0.01" class="form-control" id="precio_venta" value="0.00">
+                </div>
+              </div>
+            </div>
+
+            <!-- SECCIÓN 3: Inventario y Especificaciones Técnicas -->
+            <div class="text-primary fw-bold small mb-2 pb-1 border-bottom">
+              3. Inventario y Especificaciones Técnicas
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6">
+                <label for="llevar_stock" class="form-label small mb-1">Lleva Control de Stock</label>
+                <select class="form-select form-select-sm" id="llevar_stock">
+                  <option value="S">Sí</option>
+                  <option value="N">No</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label for="stock_critico" class="form-label small mb-1">Stock Crítico</label>
+                <input type="number" class="form-control form-control-sm" id="stock_critico" value="0">
+              </div>
+
+              <div class="col-md-4">
+                <label for="ancho" class="form-label small mb-1">Ancho (mm)</label>
+                <input type="number" step="1" class="form-control form-control-sm" id="ancho" value="0">
+              </div>
+              <div class="col-md-4">
+                <label for="alto" class="form-label small mb-1">Alto (mm)</label>
+                <input type="number" step="1" class="form-control form-control-sm" id="alto" value="0">
+              </div>
+              <div class="col-md-4">
+                <label for="tiempo_maquina" class="form-label small mb-1">Tiempo Máquina (min)</label>
+                <input type="number" step="1" class="form-control form-control-sm" id="tiempo_maquina" value="0">
+              </div>
+
+              <div class="col-md-12">
+                <label for="obs" class="form-label small mb-1">Observaciones</label>
+                <textarea class="form-control form-control-sm" id="obs" rows="2" placeholder="Notas adicionales del producto..."></textarea>
+              </div>
+            </div>
+
+            <!-- Alertas dentro del modal -->
+            <div id="alertaModal" class="mt-2"></div>
+
+          </div>
+
+          <!-- Pie del Modal -->
+          <div class="modal-footer py-2 bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-sm btn-success px-3" id="btnGuardar">💾 Guardar Artículo</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="/js/articulos.js"></script>
+</body>
+</html>

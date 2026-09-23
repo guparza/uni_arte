@@ -143,12 +143,20 @@ app.get('/api/articulos/:codigo', async (req, res) => {
   }
 });
 
-// 5. Crear un nuevo artículo (con foto optimizada por Sharp)
+// 5. Crear un nuevo artículo (con conversión a MAYÚSCULAS)
 app.post('/api/articulos', upload.single('foto'), async (req, res) => {
   try {
+    // 🔹 Normalizar texto a MAYÚSCULAS
+    const codigo_prefijo = (req.body.codigo_prefijo || '').trim().toUpperCase();
+    const codigo_sufijo  = (req.body.codigo_sufijo || '').trim().toUpperCase();
+    const codigo         = (req.body.codigo || '').trim().toUpperCase();
+    const descripcion    = (req.body.descripcion || '').trim().toUpperCase();
+    const obs            = (req.body.obs || '').trim().toUpperCase();
+
+    // Valores numéricos / selección
     const { 
-      codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, alicuota,
-      precio_venta, llevar_stock, stock_critico, ancho, alto, tiempo_maquina, obs 
+      rubro, alicuota, precio_venta, llevar_stock, stock_critico, 
+      ancho, alto, tiempo_maquina 
     } = req.body;
 
     if (!codigo || !descripcion) {
@@ -164,23 +172,23 @@ app.post('/api/articulos', upload.single('foto'), async (req, res) => {
     `;
 
     await db.query(sql, [
-      codigo.trim(),
-      (codigo_prefijo || '').trim(),
-      (codigo_sufijo || '').trim(),
-      descripcion.trim(),
+      codigo,
+      codigo_prefijo,
+      codigo_sufijo,
+      descripcion,
       rubro || 0,
       alicuota || 1,
       precio_venta || 0,
-      llevar_stock || 'S',
+      (llevar_stock || 'S').toUpperCase(),
       stock_critico || 0,
       ancho || 0,
       alto || 0,
       sup,
       tiempo_maquina || 0,
-      obs || ''
+      obs
     ]);
 
-    // Procesar y guardar la foto con Sharp si fue adjuntada
+    // Procesar foto con Sharp
     if (req.file) {
       await procesarYGuardarFoto(req.file.buffer, codigo);
     }
@@ -191,20 +199,22 @@ app.post('/api/articulos', upload.single('foto'), async (req, res) => {
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ success: false, mensaje: 'El código ingresado ya existe.' });
     }
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ success: false, mensaje: 'El rubro o alícuota seleccionado no existe.' });
-    }
     res.status(500).json({ success: false, mensaje: 'Error al insertar en la base de datos: ' + error.message });
   }
 });
 
-// 6. Actualizar un artículo existente (con foto optimizada por Sharp)
+// 6. Actualizar un artículo existente (con conversión a MAYÚSCULAS)
 app.put('/api/articulos/:codigo', upload.single('foto'), async (req, res) => {
   try {
     const { codigo } = req.params;
+
+    // 🔹 Normalizar texto a MAYÚSCULAS
+    const descripcion = (req.body.descripcion || '').trim().toUpperCase();
+    const obs         = (req.body.obs || '').trim().toUpperCase();
+
     const { 
-      descripcion, rubro, alicuota, precio_venta, llevar_stock, 
-      stock_critico, ancho, alto, tiempo_maquina, obs 
+      rubro, alicuota, precio_venta, llevar_stock, 
+      stock_critico, ancho, alto, tiempo_maquina 
     } = req.body;
 
     if (!descripcion) {
@@ -221,25 +231,25 @@ app.put('/api/articulos/:codigo', upload.single('foto'), async (req, res) => {
     `;
 
     const [result] = await db.query(sql, [
-      descripcion.trim(),
+      descripcion,
       rubro || 0,
       alicuota || 1,
       precio_venta || 0,
-      llevar_stock || 'S',
+      (llevar_stock || 'S').toUpperCase(),
       stock_critico || 0,
       ancho || 0,
       alto || 0,
       sup,
       tiempo_maquina || 0,
-      obs || '',
-      codigo
+      obs,
+      codigo.trim().toUpperCase()
     ]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado para actualizar.' });
     }
 
-    // Procesar y guardar la foto con Sharp si se seleccionó una nueva
+    // Procesar nueva foto si se seleccionó una
     if (req.file) {
       await procesarYGuardarFoto(req.file.buffer, codigo);
     }
@@ -247,9 +257,6 @@ app.put('/api/articulos/:codigo', upload.single('foto'), async (req, res) => {
     res.json({ success: true, mensaje: 'Artículo actualizado exitosamente.' });
   } catch (error) {
     console.error('Error al actualizar artículo:', error);
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ success: false, mensaje: 'El rubro o alícuota asignado no existe.' });
-    }
     res.status(500).json({ success: false, mensaje: 'Error al actualizar en la base de datos.' });
   }
 });
@@ -259,14 +266,14 @@ app.delete('/api/articulos/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
 
-    // 1. Eliminar el registro en MySQL
+    // 1. Eliminar de MySQL
     const [result] = await db.query('DELETE FROM articulos WHERE codigo = ?', [codigo]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, mensaje: 'El artículo no existe o ya fue eliminado.' });
     }
 
-    // 2. Si se eliminó de MySQL, borrar el archivo .png físico en el servidor
+    // 2. Borrar foto física si existe
     const codigoLimpio = String(codigo).trim().replace(/[/\\?%*:|"<>]/g, '-');
     const filePath = path.join(dirUploads, `${codigoLimpio}.png`);
 
@@ -274,7 +281,7 @@ app.delete('/api/articulos/:codigo', async (req, res) => {
       try {
         fs.unlinkSync(filePath);
       } catch (errFile) {
-        console.error('Error al borrar la foto del artículo:', errFile);
+        console.error('Error al borrar archivo de imagen:', errFile);
       }
     }
 
@@ -287,7 +294,7 @@ app.delete('/api/articulos/:codigo', async (req, res) => {
         mensaje: 'No se puede eliminar este artículo porque posee registros asociados en ventas o stock.' 
       });
     }
-    res.status(500).json({ success: false, mensaje: 'Error interno al intentar eliminar el artículo: ' + error.message });
+    res.status(500).json({ success: false, mensaje: 'Error interno en el servidor: ' + error.message });
   }
 });
 

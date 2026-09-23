@@ -275,22 +275,29 @@ async function prepararEdicion(codigo) {
   }
 }
 
-// 💾 Guardar Artículo (Inserta o Actualiza enviando la foto en [0])
+// 💾 Guardar Artículo (con conversión a MAYÚSCULAS en frontend)
 async function guardarArticulo() {
   const alertaDiv = document.getElementById('alertaModal');
   if (alertaDiv) {
     alertaDiv.innerHTML = '<div class="alert alert-info py-1 mb-0 small">Procesando...</div>';
   }
 
-  const inputCodigo = document.getElementById('codigo');
-  const codigo = inputCodigo ? inputCodigo.value.trim() : '';
+  // 🔹 Normalizar código y componentes a mayúsculas
+  const prefijo = (document.getElementById('codigo_prefijo')?.value || '').trim().toUpperCase();
+  const sufijo  = (document.getElementById('codigo_sufijo')?.value || '').trim().toUpperCase();
+  const codigo  = (document.getElementById('codigo')?.value || '').trim().toUpperCase();
   const inputFoto = document.getElementById('inputFoto');
 
   const formData = new FormData();
-  formData.append('codigo_prefijo', document.getElementById('codigo_prefijo') ? document.getElementById('codigo_prefijo').value : '');
-  formData.append('codigo_sufijo', document.getElementById('codigo_sufijo') ? document.getElementById('codigo_sufijo').value : '');
+  formData.append('codigo_prefijo', prefijo);
+  formData.append('codigo_sufijo', sufijo);
   formData.append('codigo', codigo);
-  formData.append('descripcion', document.getElementById('descripcion') ? document.getElementById('descripcion').value : '');
+  
+  // 🔹 Convertir campos de texto descriptivos a MAYÚSCULAS
+  formData.append('descripcion', (document.getElementById('descripcion')?.value || '').trim().toUpperCase());
+  formData.append('obs', (document.getElementById('obs')?.value || '').trim().toUpperCase());
+
+  // Campos numéricos y selecciones
   formData.append('rubro', document.getElementById('rubro') ? document.getElementById('rubro').value : 0);
   formData.append('precio_venta', document.getElementById('precio_venta') ? document.getElementById('precio_venta').value : 0);
   formData.append('llevar_stock', document.getElementById('llevar_stock') ? document.getElementById('llevar_stock').value : 'S');
@@ -298,9 +305,8 @@ async function guardarArticulo() {
   formData.append('ancho', document.getElementById('ancho') ? Math.round(parseFloat(document.getElementById('ancho').value || 0)) : 0);
   formData.append('alto', document.getElementById('alto') ? Math.round(parseFloat(document.getElementById('alto').value || 0)) : 0);
   formData.append('tiempo_maquina', document.getElementById('tiempo_maquina') ? Math.round(parseFloat(document.getElementById('tiempo_maquina').value || 0)) : 0);
-  formData.append('obs', document.getElementById('obs') ? document.getElementById('obs').value : '');
 
-  // Adjuntar únicamente el archivo binario individual en la posición [0]
+  // Adjuntar foto si el usuario seleccionó un archivo nuevo
   if (inputFoto && inputFoto.files && inputFoto.files.length > 0) {
     formData.append('foto', inputFoto.files[0]);
   }
@@ -337,7 +343,7 @@ async function guardarArticulo() {
   }
 }
 
-// 🗑️ Eliminar
+// 🗑️ Eliminar artículo
 async function eliminarArticulo(codigo) {
   const confirmar = confirm(`¿Estás seguro de que deseas eliminar el artículo con código "${codigo}"?`);
   if (!confirmar) return;
@@ -347,22 +353,17 @@ async function eliminarArticulo(codigo) {
       method: 'DELETE'
     });
 
-    if (!respuesta.ok && respuesta.status === 404) {
-      alert('⚠️ La ruta para eliminar no existe en el servidor.');
-      return;
-    }
-
     const resultado = await respuesta.json();
 
     if (resultado.success) {
       alert(`✅ ${resultado.mensaje}`);
       cargarArticulos();
     } else {
-      alert(`⚠️ ${resultado.mensaje}`);
+      alert(`⚠️ ${resultado.mensaje || 'No se pudo eliminar el artículo.'}`);
     }
   } catch (error) {
     console.error('Error al eliminar:', error);
-    alert('Error de conexión al intentar eliminar el artículo.');
+    alert('Error de conexión o el servidor no respondió adecuadamente.');
   }
 }
 

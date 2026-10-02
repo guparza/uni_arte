@@ -1,288 +1,252 @@
-let modalArticulo;
+// public/js/articulos.js
+let articulosData = []; // Memoria RAM local
 let modoEdicion = false;
+let modalArticulo = null;
+let timerBusqueda = null; // Timer para el debounce del buscador
 
-// SVG de imagen por defecto (placeholder)
-const PLACEHOLDER_IMG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='%23ccc' viewBox='0 0 16 16'><path d='M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z'/><path d='M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z'/></svg>";
-
-// Función auxiliar global para manejar imágenes no encontradas
-function manejarErrorImagen(img) {
-  img.onerror = null;
-  img.src = PLACEHOLDER_IMG;
-}
+const placeholderSvg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgdmlld0JveD0iMCAwIDQwIDQwIj48cmVjdCB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIGZpbGw9IiNlOWVjZWYiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSI3IiBmb250LWdlaWdodD0iYm9sZCIgZmlsbD0iIzZjNzVkIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+U0lOIEZPVE88L3RleHQ+PC9zdmc+";
 
 document.addEventListener('DOMContentLoaded', () => {
-  const inputBuscar = document.getElementById('inputBuscar');
-  const btnNuevo = document.getElementById('btnNuevo');
-  const formArticulo = document.getElementById('formArticulo');
-  const inputPrefijo = document.getElementById('codigo_prefijo');
-  const inputSufijo = document.getElementById('codigo_sufijo');
-  const selectRubro = document.getElementById('rubro');
-  const inputFoto = document.getElementById('inputFoto');
-  const modalElement = document.getElementById('modalArticulo');
-
-  if (modalElement) {
-    modalArticulo = new bootstrap.Modal(modalElement);
+  const modalEl = document.getElementById('modalArticulo');
+  if (modalEl && typeof bootstrap !== 'undefined') {
+    modalArticulo = new bootstrap.Modal(modalEl);
   }
 
   cargarArticulos();
-  cargarRubros();
+  cargarRubrosSelect();
 
-  // Función para regenerar el Código Final con guion medio al tipear
-  const actualizarCodigoFinal = () => {
-    if (!modoEdicion) {
-      const pref = inputPrefijo ? inputPrefijo.value.trim() : '';
-      const suf = inputSufijo ? inputSufijo.value.trim() : '';
-      const inputCodigo = document.getElementById('codigo');
-      if (inputCodigo) {
-        inputCodigo.value = (pref && suf) ? `${pref}-${suf}` : `${pref}${suf}`;
-      }
-    }
-  };
-
-  // Previsualización de imagen seleccionada localmente
-  if (inputFoto) {
-    inputFoto.addEventListener('change', (e) => {
-      const archivos = e.target.files;
-      const imgPreview = document.getElementById('imgPreview');
-      if (archivos && archivos.length > 0 && imgPreview) {
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          imgPreview.src = evt.target.result;
-        };
-        reader.readAsDataURL(archivos);
-      }
-    });
+  const inputBuscar = document.getElementById('buscarInput') || document.getElementById('buscar');
+  if (inputBuscar) {
+    inputBuscar.addEventListener('input', filtrarTabla);
   }
 
+  const formArticulo = document.getElementById('formArticulo');
   if (formArticulo) {
-    // Auto-selección total al enfocar campos
+    // Auto-seleccionar texto al recibir foco
     formArticulo.querySelectorAll('input, textarea').forEach(input => {
       input.addEventListener('focus', () => {
         setTimeout(() => {
-          if (typeof input.select === 'function') {
-            input.select();
-          }
+          if (typeof input.select === 'function') input.select();
         }, 50);
       });
     });
 
-    // Navegación Enter entre campos
+    // Navegación con tecla Enter entre campos
     formArticulo.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit' && e.target.type !== 'file') {
+      if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit') {
         e.preventDefault();
-        
         const enfocables = Array.from(
-          formArticulo.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]), button[type="submit"]')
+          formArticulo.querySelectorAll('input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])')
         );
-        
-        const indiceActual = enfocables.indexOf(e.target);
-        if (indiceActual > -1 && indiceActual < enfocables.length - 1) {
-          const siguiente = enfocables[indiceActual + 1];
+        const index = enfocables.indexOf(e.target);
+        if (index > -1 && index < enfocables.length - 1) {
+          const siguiente = enfocables[index + 1];
           siguiente.focus();
-          
-          if (typeof siguiente.select === 'function') {
-            siguiente.select();
-          }
+          if (typeof siguiente.select === 'function') siguiente.select();
         }
       }
     });
   }
 
-  // Concatenación libre al tipear en Prefijo o Sufijo
-  if (inputPrefijo) inputPrefijo.addEventListener('input', actualizarCodigoFinal);
-  if (inputSufijo) inputSufijo.addEventListener('input', actualizarCodigoFinal);
+  // Auto-armado de código
+  const inputPrefijo = document.getElementById('codigo_prefijo');
+  const inputSufijo = document.getElementById('codigo_sufijo');
 
-  if (inputBuscar) {
-    inputBuscar.addEventListener('input', () => cargarArticulos(inputBuscar.value));
-  }
+  const actualizarCodigoCompleto = () => {
+    const prefijo = (inputPrefijo?.value || '').trim().toUpperCase();
+    const sufijo = (inputSufijo?.value || '').trim().toUpperCase();
+    const inputCodigo = document.getElementById('codigo');
+    if (inputCodigo && !modoEdicion) {
+      inputCodigo.value = (prefijo && sufijo) ? `${prefijo}-${sufijo}` : (prefijo || sufijo);
+    }
+  };
 
-  if (btnNuevo) {
-    btnNuevo.addEventListener('click', () => {
-      modoEdicion = false;
-      if (formArticulo) formArticulo.reset();
-      
-      // Habilitar campos de código para nuevos registros
-      if (inputPrefijo) inputPrefijo.disabled = false;
-      if (inputSufijo) inputSufijo.disabled = false;
-      const inputCodigo = document.getElementById('codigo');
-      if (inputCodigo) inputCodigo.removeAttribute('readonly');
-
-      if (inputFoto) inputFoto.value = '';
-      
-      if (document.getElementById('ancho')) document.getElementById('ancho').value = '0';
-      if (document.getElementById('alto')) document.getElementById('alto').value = '0';
-      if (document.getElementById('tiempo_maquina')) document.getElementById('tiempo_maquina').value = '0';
-
-      const imgPreview = document.getElementById('imgPreview');
-      if (imgPreview) imgPreview.src = PLACEHOLDER_IMG;
-
-      const labelModal = document.getElementById('modalArticuloLabel');
-      if (labelModal) labelModal.innerText = '➕ Nuevo Artículo';
-      
-      const alertaModal = document.getElementById('alertaModal');
-      if (alertaModal) alertaModal.innerHTML = '';
-      
-      if (modalArticulo) {
-        modalArticulo.show();
-        setTimeout(() => {
-          if (selectRubro) selectRubro.focus();
-        }, 400);
-      }
-    });
-  }
-
-  if (formArticulo) {
-    formArticulo.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      await guardarArticulo();
-    });
-  }
+  if (inputPrefijo) inputPrefijo.addEventListener('input', actualizarCodigoCompleto);
+  if (inputSufijo) inputSufijo.addEventListener('input', actualizarCodigoCompleto);
 });
 
-async function cargarRubros() {
+// 📋 Cargar lista completa desde la API a la memoria RAM
+async function cargarArticulos() {
+  const tbody = document.getElementById('tablaArticulos');
+  if (!tbody) return;
+
   try {
-    const res = await fetch('/api/rubros');
-    const data = await res.json();
-    const selectRubro = document.getElementById('rubro');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Cargando catálogo...</td></tr>';
 
-    if (selectRubro && data.success) {
-      selectRubro.innerHTML = '<option value="0">-- Sin Rubro --</option>';
-      data.datos.forEach(r => {
-        selectRubro.innerHTML += `<option value="${r.codigo}">${r.descripcion}</option>`;
-      });
+    const res = await fetch('/api/articulos');
+    const resultado = await res.json();
+
+    if (resultado.success && Array.isArray(resultado.data)) {
+      articulosData = resultado.data;
+      renderizarTabla(articulosData);
+    } else {
+      articulosData = [];
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No hay artículos registrados.</td></tr>';
     }
-  } catch (error) {
-    console.error('Error al cargar rubros:', error);
-  }
-}
-
-// Cargar catálogo de artículos con parámetro anti-caché en la imagen
-async function cargarArticulos(filtro = '') {
-  try {
-    const tabla = document.getElementById('tablaArticulos');
-    if (!tabla) return;
-
-    const url = filtro ? `/api/articulos?buscar=${encodeURIComponent(filtro)}` : '/api/articulos';
-    const respuesta = await fetch(url);
-    const resultado = await respuesta.json();
-
-    tabla.innerHTML = '';
-
-    if (!resultado.success || !resultado.datos || resultado.datos.length === 0) {
-      tabla.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">No se encontraron artículos.</td></tr>`;
-      return;
-    }
-
-    resultado.datos.forEach(art => {
-      const fila = document.createElement('tr');
-      const precioFormateado = new Intl.NumberFormat('es-AR', {
-        style: 'currency',
-        currency: 'ARS'
-      }).format(art.precio_venta || 0);
-
-      const urlFoto = `/uploads/articulos/${encodeURIComponent(art.codigo)}.png?v=${Date.now()}`;
-
-      fila.innerHTML = `
-        <td class="text-center">
-          <img src="${urlFoto}" alt="${art.codigo}" class="rounded border bg-white" style="width: 40px; height: 40px; object-fit: contain;" onerror="manejarErrorImagen(this)">
-        </td>
-        <td><strong>${art.codigo}</strong></td>
-        <td>${art.descripcion}</td>
-        <td><span class="badge bg-secondary">${art.rubro}</span></td>
-        <td>${precioFormateado}</td>
-        <td>${art.llevar_stock === 'S' ? '<span class="badge bg-success">Sí</span>' : '<span class="badge bg-secondary">No</span>'}</td>
-        <td>${art.stock_critico}</td>
-        <td class="text-center">
-          <button class="btn btn-sm btn-warning me-1" onclick="prepararEdicion('${art.codigo}')" title="Editar">✏️ Editar</button>
-          <button class="btn btn-sm btn-danger" onclick="eliminarArticulo('${art.codigo}')" title="Eliminar">🗑️ Eliminar</button>
-        </td>
-      `;
-
-      tabla.appendChild(fila);
-    });
-
   } catch (error) {
     console.error('Error al cargar artículos:', error);
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error de conexión con el servidor.</td></tr>';
   }
 }
 
-// ✏️ Preparar Edición (Completar campos y foto correctamente)
-async function prepararEdicion(codigo) {
+// 📋 Cargar selector de rubros
+async function cargarRubrosSelect() {
+  const selectRubro = document.getElementById('rubro');
+  if (!selectRubro) return;
+
   try {
-    const respuesta = await fetch(`/api/articulos/${encodeURIComponent(codigo)}`);
-    const resultado = await respuesta.json();
+    const res = await fetch('/api/rubros');
+    const resultado = await res.json();
 
-    if (!resultado.success || !resultado.dato) {
-      alert('Error al obtener los datos del artículo de la base de datos.');
-      return;
-    }
-
-    const art = Array.isArray(resultado.dato) ? resultado.dato[0] : resultado.dato;
-
-    if (!art) {
-      alert('No se encontró el registro del artículo.');
-      return;
-    }
-
-    modoEdicion = true;
-
-    const inputFoto = document.getElementById('inputFoto');
-    if (inputFoto) inputFoto.value = '';
-
-    document.getElementById('codigo_prefijo').value = art.codigo_prefijo || '';
-    document.getElementById('codigo_sufijo').value = art.codigo_sufijo || '';
-    document.getElementById('codigo').value = art.codigo || '';
-    document.getElementById('descripcion').value = art.descripcion || '';
-    document.getElementById('rubro').value = art.rubro || 0;
-    document.getElementById('precio_venta').value = art.precio_venta || 0;
-    document.getElementById('llevar_stock').value = art.llevar_stock || 'S';
-    document.getElementById('stock_critico').value = art.stock_critico || 0;
-    document.getElementById('ancho').value = art.ancho || 0;
-    document.getElementById('alto').value = art.alto || 0;
-    document.getElementById('tiempo_maquina').value = art.tiempo_maquina || 0;
-    document.getElementById('obs').value = art.obs || '';
-
-    // Bloquear clave primaria en edición
-    document.getElementById('codigo').setAttribute('readonly', true);
-    document.getElementById('codigo_prefijo').setAttribute('disabled', true);
-    document.getElementById('codigo_sufijo').setAttribute('disabled', true);
-
-    const imgPreview = document.getElementById('imgPreview');
-    if (imgPreview) {
-      imgPreview.onerror = () => manejarErrorImagen(imgPreview);
-      imgPreview.src = `/uploads/articulos/${encodeURIComponent(art.codigo)}.png?v=${Date.now()}`;
-    }
-
-    const labelModal = document.getElementById('modalArticuloLabel');
-    if (labelModal) labelModal.innerText = `✏️ Editar Artículo: ${art.codigo}`;
-
-    const alertaModal = document.getElementById('alertaModal');
-    if (alertaModal) alertaModal.innerHTML = '';
-
-    if (modalArticulo) {
-      modalArticulo.show();
-      setTimeout(() => {
-        const inputDesc = document.getElementById('descripcion');
-        if (inputDesc) {
-          inputDesc.focus();
-          inputDesc.select();
-        }
-      }, 400);
+    if (resultado.success && Array.isArray(resultado.data)) {
+      let opciones = '<option value="0">-- Seleccionar Rubro --</option>';
+      resultado.data.forEach(r => {
+        opciones += `<option value="${r.codigo}">${r.descripcion}</option>`;
+      });
+      selectRubro.innerHTML = opciones;
     }
   } catch (error) {
-    console.error('Error al preparar edición:', error);
-    alert('Ocurrió un error al conectar con el servidor para editar.');
+    console.error('Error al cargar rubros en select:', error);
   }
 }
 
-// 💾 Guardar Artículo (con conversión a MAYÚSCULAS en frontend)
-async function guardarArticulo() {
-  const alertaDiv = document.getElementById('alertaModal');
-  if (alertaDiv) {
-    alertaDiv.innerHTML = '<div class="alert alert-info py-1 mb-0 small">Procesando...</div>';
+// 🎨 Renderizar la tabla (LIMITADO A LAS PRIMERAS 50 FILAS EN PANTALLA)
+function renderizarTabla(lista) {
+  const tbody = document.getElementById('tablaArticulos');
+  if (!tbody) return;
+
+  if (lista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No se encontraron coincidencias.</td></tr>';
+    return;
   }
 
-  // 🔹 Normalizar código y componentes a mayúsculas
+  // ⚡ LÍMITE DE ALTO RENDIMIENTO: Solo se procesan las primeras 50 filas
+  const vistaLimitada = lista.slice(0, 50);
+
+  tbody.innerHTML = vistaLimitada.map(a => {
+    const codigoLimpio = String(a.codigo || '').trim().replace(/[/\\?%*:|"<>]/g, '-');
+    const fotoUrl = a.tiene_foto 
+      ? `/uploads/articulos/${codigoLimpio}.png` 
+      : placeholderSvg;
+
+    return `
+      <tr>
+        <td class="text-center">
+          <!-- ⚡ loading="lazy" evita descargar fotos fuera de pantalla -->
+          <img src="${fotoUrl}" 
+               alt="Foto" 
+               class="rounded border" 
+               loading="lazy"
+               style="width: 40px; height: 40px; object-fit: contain;">
+        </td>
+        <td><strong>${a.codigo}</strong></td>
+        <td>${a.descripcion}</td>
+        <td>${a.rubro_nombre || 'SIN RUBRO'}</td>
+        <td class="text-end">$ ${parseFloat(a.precio_venta || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-primary py-0 px-2 me-1" onclick="editarArticulo('${a.codigo}')">✏️ Editar</button>
+          <button class="btn btn-sm btn-danger py-0 px-2" onclick="eliminarArticulo('${a.codigo}')">🗑️ Eliminar</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+// 🔍 Filtrado con DEBOUNCE (espera 200ms al tipear antes de filtrar)
+function filtrarTabla() {
+  clearTimeout(timerBusqueda);
+
+  timerBusqueda = setTimeout(() => {
+    const inputBuscar = document.getElementById('buscarInput') || document.getElementById('buscar');
+    const filtro = (inputBuscar?.value || '').toLowerCase().trim();
+
+    if (!filtro) {
+      renderizarTabla(articulosData);
+      return;
+    }
+
+    const filtrados = articulosData.filter(a => {
+      const codigo = String(a.codigo || '').toLowerCase();
+      const descripcion = String(a.descripcion || '').toLowerCase();
+      const rubro = String(a.rubro_nombre || '').toLowerCase();
+      return codigo.includes(filtro) || descripcion.includes(filtro) || rubro.includes(filtro);
+    });
+
+    renderizarTabla(filtrados);
+  }, 200);
+}
+
+// ➕ Abrir modal para crear
+function abrirModalCrear() {
+  modoEdicion = false;
+  document.getElementById('formArticulo')?.reset();
+  
+  const inputCodigo = document.getElementById('codigo');
+  if (inputCodigo) inputCodigo.readOnly = true;
+
+  document.getElementById('modalTitulo').innerText = '➕ Nuevo Artículo';
+  
+  const alertaDiv = document.getElementById('alertaModal');
+  if (alertaDiv) alertaDiv.innerHTML = '';
+
+  if (!modalArticulo) {
+    const modalEl = document.getElementById('modalArticulo');
+    if (modalEl && typeof bootstrap !== 'undefined') modalArticulo = new bootstrap.Modal(modalEl);
+  }
+  if (modalArticulo) {
+    modalArticulo.show();
+    setTimeout(() => {
+      document.getElementById('codigo_prefijo')?.focus();
+    }, 400);
+  }
+}
+
+// ✏️ Cargar datos para editar
+async function editarArticulo(codigo) {
+  modoEdicion = true;
+  const alertaDiv = document.getElementById('alertaModal');
+  if (alertaDiv) alertaDiv.innerHTML = '';
+
+  try {
+    const res = await fetch(`/api/articulos/${encodeURIComponent(codigo)}`);
+    const resultado = await res.json();
+
+    if (resultado.success && resultado.data.length > 0) {
+      const a = resultado.data[0] || resultado.data;
+
+      document.getElementById('codigo_prefijo').value = a.codigo_prefijo || '';
+      document.getElementById('codigo_sufijo').value  = a.codigo_sufijo || '';
+      document.getElementById('codigo').value         = a.codigo || '';
+      document.getElementById('codigo').readOnly       = true;
+      document.getElementById('descripcion').value    = a.descripcion || '';
+      document.getElementById('rubro').value          = a.rubro || 0;
+      document.getElementById('precio_venta').value   = a.precio_venta || 0;
+      document.getElementById('llevar_stock').value  = a.llevar_stock || 'S';
+      document.getElementById('stock_critico').value = a.stock_critico || 0;
+      document.getElementById('ancho').value         = a.ancho || 0;
+      document.getElementById('alto').value          = a.alto || 0;
+      document.getElementById('tiempo_maquina').value = a.tiempo_maquina || 0;
+      document.getElementById('obs').value           = a.obs || '';
+
+      document.getElementById('modalTitulo').innerText = `✏️ Editar Artículo: ${a.codigo}`;
+
+      if (!modalArticulo) {
+        const modalEl = document.getElementById('modalArticulo');
+        if (modalEl && typeof bootstrap !== 'undefined') modalArticulo = new bootstrap.Modal(modalEl);
+      }
+      if (modalArticulo) modalArticulo.show();
+    }
+  } catch (error) {
+    console.error('Error al obtener datos del artículo:', error);
+    alert('No se pudieron obtener los datos para editar.');
+  }
+}
+
+// 💾 Guardar
+async function guardarArticulo() {
+  const alertaDiv = document.getElementById('alertaModal');
+  if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-info py-1 mb-0 small">Procesando...</div>';
+
   const prefijo = (document.getElementById('codigo_prefijo')?.value || '').trim().toUpperCase();
   const sufijo  = (document.getElementById('codigo_sufijo')?.value || '').trim().toUpperCase();
   const codigo  = (document.getElementById('codigo')?.value || '').trim().toUpperCase();
@@ -292,21 +256,17 @@ async function guardarArticulo() {
   formData.append('codigo_prefijo', prefijo);
   formData.append('codigo_sufijo', sufijo);
   formData.append('codigo', codigo);
-  
-  // 🔹 Convertir campos de texto descriptivos a MAYÚSCULAS
   formData.append('descripcion', (document.getElementById('descripcion')?.value || '').trim().toUpperCase());
   formData.append('obs', (document.getElementById('obs')?.value || '').trim().toUpperCase());
 
-  // Campos numéricos y selecciones
   formData.append('rubro', document.getElementById('rubro') ? document.getElementById('rubro').value : 0);
   formData.append('precio_venta', document.getElementById('precio_venta') ? document.getElementById('precio_venta').value : 0);
   formData.append('llevar_stock', document.getElementById('llevar_stock') ? document.getElementById('llevar_stock').value : 'S');
   formData.append('stock_critico', document.getElementById('stock_critico') ? document.getElementById('stock_critico').value : 0);
-  formData.append('ancho', document.getElementById('ancho') ? Math.round(parseFloat(document.getElementById('ancho').value || 0)) : 0);
-  formData.append('alto', document.getElementById('alto') ? Math.round(parseFloat(document.getElementById('alto').value || 0)) : 0);
-  formData.append('tiempo_maquina', document.getElementById('tiempo_maquina') ? Math.round(parseFloat(document.getElementById('tiempo_maquina').value || 0)) : 0);
+  formData.append('ancho', document.getElementById('ancho') ? parseFloat(document.getElementById('ancho').value || 0) : 0);
+  formData.append('alto', document.getElementById('alto') ? parseFloat(document.getElementById('alto').value || 0) : 0);
+  formData.append('tiempo_maquina', document.getElementById('tiempo_maquina') ? parseFloat(document.getElementById('tiempo_maquina').value || 0) : 0);
 
-  // Adjuntar foto si el usuario seleccionó un archivo nuevo
   if (inputFoto && inputFoto.files && inputFoto.files.length > 0) {
     formData.append('foto', inputFoto.files[0]);
   }
@@ -315,58 +275,48 @@ async function guardarArticulo() {
   const url = modoEdicion ? `/api/articulos/${encodeURIComponent(codigo)}` : '/api/articulos';
 
   try {
-    const respuesta = await fetch(url, {
-      method: metodo,
-      body: formData
-    });
-
+    const respuesta = await fetch(url, { method: metodo, body: formData });
     const resultado = await respuesta.json();
 
     if (resultado.success) {
-      if (alertaDiv) {
-        alertaDiv.innerHTML = `<div class="alert alert-success py-1 mb-0 small">${resultado.mensaje}</div>`;
-      }
+      if (alertaDiv) alertaDiv.innerHTML = `<div class="alert alert-success py-1 mb-0 small">${resultado.mensaje}</div>`;
       setTimeout(() => {
         if (modalArticulo) modalArticulo.hide();
         cargarArticulos();
       }, 1000);
     } else {
-      if (alertaDiv) {
-        alertaDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${resultado.mensaje}</div>`;
-      }
+      if (alertaDiv) alertaDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${resultado.mensaje}</div>`;
     }
   } catch (error) {
     console.error('Error al guardar:', error);
-    if (alertaDiv) {
-      alertaDiv.innerHTML = '<div class="alert alert-danger py-1 mb-0 small">Error de conexión con el servidor.</div>';
-    }
+    if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-danger py-1 mb-0 small">Error de conexión con el servidor.</div>';
   }
 }
 
-// 🗑️ Eliminar artículo
+// 🗑️ Eliminar
 async function eliminarArticulo(codigo) {
-  const confirmar = confirm(`¿Estás seguro de que deseas eliminar el artículo con código "${codigo}"?`);
-  if (!confirmar) return;
+  if (!confirm(`¿Estás seguro de que deseas eliminar el artículo "${codigo}"?`)) return;
 
   try {
-    const respuesta = await fetch(`/api/articulos/${encodeURIComponent(codigo)}`, {
-      method: 'DELETE'
-    });
-
+    const respuesta = await fetch(`/api/articulos/${encodeURIComponent(codigo)}`, { method: 'DELETE' });
     const resultado = await respuesta.json();
 
     if (resultado.success) {
-      alert(`✅ ${resultado.mensaje}`);
       cargarArticulos();
     } else {
       alert(`⚠️ ${resultado.mensaje || 'No se pudo eliminar el artículo.'}`);
     }
   } catch (error) {
     console.error('Error al eliminar:', error);
-    alert('Error de conexión o el servidor no respondió adecuadamente.');
+    alert('Error de conexión al intentar eliminar.');
   }
 }
 
-// 🔹 EXPOSICIÓN GLOBAL PARA ATRIBUTOS onclick EN TABLA HTML
-window.prepararEdicion = prepararEdicion;
+// Funciones globales
+window.cargarArticulos = cargarArticulos;
+window.filtrarTabla = filtrarTabla;
+window.abrirModalCrear = abrirModalCrear;
+window.editarArticulo = editarArticulo;
+window.guardarArticulo = guardarArticulo;
 window.eliminarArticulo = eliminarArticulo;
+window.cargarRubrosSelect = cargarRubrosSelect;

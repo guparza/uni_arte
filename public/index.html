@@ -3,273 +3,372 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UniArte - Catálogo de Artículos</title>
+  <title>Sistema UniArte</title>
   <!-- Bootstrap 5 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
-<style>
-  /* Forzar vista en mayúsculas en los inputs */
-  .text-uppercase-input {
-    text-transform: uppercase;
-  }
-
-  /* 📌 Contenedor con altura fija y scroll vertical */
-  .tabla-scroll {
-    max-height: 70vh; /* Ocupa hasta el 70% de la pantalla */
-    overflow-y: auto;
-  }
-
-  /* 📌 Fijar el encabezado arriba al desplazar hacia abajo */
-  .tabla-scroll thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    background-color: #212529 !important; /* Mantiene el fondo oscuro de Bootstrap */
-    color: #ffffff !important;
-  }
-</style>
+  <style>
+    .style-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .style-scrollbar::-webkit-scrollbar-thumb { background: #6c757d; border-radius: 4px; }
+    .text-uppercase-input { text-transform: uppercase; }
+  </style>
 </head>
 <body class="bg-light">
 
-  <div class="container-fluid py-4 px-4">
-    
-    <!-- Encabezado de la Aplicación -->
-    <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-      <h2 class="fw-bold m-0 text-dark">🎨 UniArte - Gestión de Artículos</h2>
-      <div>
-        <button class="btn btn-outline-secondary me-2" onclick="abrirModalRubros()">
-          📁 Administrar Rubros
+  <!-- ENCABEZADO SUPERIOR Y NAVEGACIÓN -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3 shadow-sm px-3 sticky-top">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold fs-5" href="#">🎨 Sistema UniArte</a>
+      <div class="d-flex gap-2">
+        <button id="btnNavArticulos" class="btn btn-primary btn-sm fw-bold active px-3" onclick="mostrarSeccion('articulos')">
+          📦 Artículos
         </button>
-        <button class="btn btn-primary fw-semibold" 
-                data-bs-toggle="modal" 
-                data-bs-target="#modalArticulo" 
-                onclick="abrirModalCrear()">
-          ➕ Nuevo Artículo
+        <button id="btnNavRubros" class="btn btn-outline-light btn-sm fw-bold px-3" onclick="mostrarSeccion('rubros')">
+          📁 Rubros
+        </button>
+        <button id="btnNavClientes" class="btn btn-outline-light btn-sm fw-bold px-3" onclick="mostrarSeccion('clientes')">
+          👤 Clientes
         </button>
       </div>
     </div>
+  </nav>
 
-    <!-- Barra de Búsqueda -->
-    <div class="card shadow-sm mb-4">
-      <div class="card-body py-3">
-        <div class="row g-2 align-items-center">
-          <div class="col">
-            <div class="input-group">
-              <span class="input-group-text bg-white">🔍</span>
-              <input type="text" 
-                     id="buscarInput" 
-                     class="form-control border-start-0" 
-                     placeholder="Buscar por código, descripción o rubro..." 
-                     oninput="filtrarTabla()" 
-                     onkeyup="filtrarTabla()">
+  <!-- 1. VISTA DE ARTÍCULOS -->
+  <div id="seccionArticulos">
+    <div class="container-fluid my-3">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
+          <h5 class="mb-0 fs-6 fw-bold">📦 Catálogo de Artículos</h5>
+          <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="abrirModalCrearArticulo()">
+            ➕ Nuevo Artículo
+          </button>
+        </div>
+        <div class="card-body p-2">
+          <div class="row g-2 mb-2">
+            <div class="col-md-6 col-lg-4">
+              <input type="text" class="form-control form-control-sm" id="inputBuscarArticulo" placeholder="🔍 Buscar por código o descripción...">
             </div>
+          </div>
+          <div class="table-responsive style-scrollbar" style="max-height: 65vh;">
+            <table class="table table-hover table-striped table-sm border align-middle mb-0">
+              <thead class="table-dark sticky-top">
+                <tr>
+                  <th style="width: 100px;">Código</th>
+                  <th>Descripción</th>
+                  <th>Rubro</th>
+                  <th class="text-end">Precio Venta</th>
+                  <th class="text-center">Medidas</th>
+                  <th class="text-center">Superficie</th>
+                  <th class="text-end" style="width: 100px;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyArticulos">
+                <tr><td colspan="7" class="text-center text-muted py-3">Cargando artículos...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Tabla Principal de Catálogo -->
-<div class="card shadow-sm">
-  <div class="card-body p-0">
-    <!-- 🔹 Se agrega la clase tabla-scroll aquí -->
-    <div class="table-responsive tabla-scroll">
-      <table class="table table-hover align-middle mb-0">
-        <thead class="table-dark">
-          <tr>
-            <th class="text-center" style="width: 70px;">Foto</th>
-            <th style="width: 150px;">Código</th>
-            <th>Descripción</th>
-            <th>Rubro</th>
-            <th class="text-end" style="width: 140px;">Precio Venta</th>
-            <th class="text-center" style="width: 180px;">Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="tablaArticulos">
-          <tr>
-            <td colspan="6" class="text-center py-4 text-muted">Cargando catálogo...</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
   </div>
-</div>
 
-  <!-- MODAL: CREAR / EDITAR ARTÍCULO -->
-  <div class="modal fade" id="modalArticulo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <!-- 🔹 modal-dialog-scrollable evita que los campos se corten en pantalla -->
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-      <div class="modal-content">
-        
-        <div class="modal-header bg-dark text-white">
-          <h5 class="modal-title" id="modalTitulo">➕ Nuevo Artículo</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- 2. VISTA DE RUBROS -->
+  <div id="seccionRubros" class="d-none">
+    <div class="container-fluid my-3">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
+          <h5 class="mb-0 fs-6 fw-bold">📁 Gestión de Rubros</h5>
+          <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="abrirModalCrearRubro()">
+            ➕ Nuevo Rubro
+          </button>
         </div>
-
-        <div class="modal-body px-4">
-          <div id="alertaModal" class="mb-3"></div>
-
-          <form id="formArticulo">
-            
-            <!-- Código: Prefijo, Sufijo y Código Automático -->
-            <div class="row g-3 mb-3">
-              <div class="col-md-4">
-                <label for="codigo_prefijo" class="form-label fw-bold small">Prefijo</label>
-                <input type="text" id="codigo_prefijo" class="form-control text-uppercase-input" placeholder="Ej: ART" maxlength="10">
-              </div>
-              <div class="col-md-4">
-                <label for="codigo_sufijo" class="form-label fw-bold small">Sufijo</label>
-                <input type="text" id="codigo_sufijo" class="form-control text-uppercase-input" placeholder="Ej: 001" maxlength="10">
-              </div>
-              <div class="col-md-4">
-                <label for="codigo" class="form-label fw-bold small">Código Completo (*)</label>
-                <input type="text" id="codigo" class="form-control bg-light fw-bold text-primary" readonly placeholder="Se arma automático">
-              </div>
+        <div class="card-body p-2">
+          <div class="row g-2 mb-2">
+            <div class="col-md-6 col-lg-4">
+              <input type="text" class="form-control form-control-sm" id="inputBuscarRubro" placeholder="🔍 Buscar por código o descripción...">
             </div>
-
-            <!-- Descripción -->
-            <div class="mb-3">
-              <label for="descripcion" class="form-label fw-bold small">Descripción del Artículo (*)</label>
-              <input type="text" id="descripcion" class="form-control text-uppercase-input" placeholder="Escribí la descripción del artículo..." required>
-            </div>
-
-            <!-- Rubro y Precio -->
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
-                <label for="rubro" class="form-label fw-bold small">Rubro / Categoría</label>
-                <select id="rubro" class="form-select">
-                  <option value="0">-- Seleccionar Rubro --</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label for="precio_venta" class="form-label fw-bold small">Precio de Venta ($)</label>
-                <input type="number" id="precio_venta" class="form-control" step="0.01" min="0" value="0.00">
-              </div>
-            </div>
-
-            <!-- Control de Stock -->
-            <div class="row g-3 mb-3">
-              <div class="col-md-6">
-                <label for="llevar_stock" class="form-label fw-bold small">¿Lleva Stock?</label>
-                <select id="llevar_stock" class="form-select">
-                  <option value="S">SÍ</option>
-                  <option value="N">NO</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label for="stock_critico" class="form-label fw-bold small">Stock Crítico</label>
-                <input type="number" id="stock_critico" class="form-control" min="0" value="0">
-              </div>
-            </div>
-
-            <!-- Dimensiones y Tiempo de Máquina -->
-            <div class="row g-3 mb-3">
-              <div class="col-md-4">
-                <label for="ancho" class="form-label fw-bold small">Ancho (cm)</label>
-                <input type="number" id="ancho" class="form-control" step="0.01" min="0" value="0.00">
-              </div>
-              <div class="col-md-4">
-                <label for="alto" class="form-label fw-bold small">Alto (cm)</label>
-                <input type="number" id="alto" class="form-control" step="0.01" min="0" value="0.00">
-              </div>
-              <div class="col-md-4">
-                <label for="tiempo_maquina" class="form-label fw-bold small">Tiempo Máquina (min)</label>
-                <input type="number" id="tiempo_maquina" class="form-control" step="0.1" min="0" value="0.0">
-              </div>
-            </div>
-
-            <!-- Observaciones -->
-            <div class="mb-3">
-              <label for="obs" class="form-label fw-bold small">Observaciones</label>
-              <textarea id="obs" class="form-control text-uppercase-input" rows="2" placeholder="Notas adicionales..."></textarea>
-            </div>
-
-            <!-- 📷 Subida de Foto (Visible siempre al hacer scroll) -->
-            <div class="mb-3">
-              <label for="inputFoto" class="form-label fw-bold small">📷 Imagen del Artículo (PNG / JPG)</label>
-              <input type="file" id="inputFoto" class="form-control" accept="image/*">
-            </div>
-
-          </form>
+          </div>
+          <div class="table-responsive style-scrollbar" style="max-height: 65vh;">
+            <table class="table table-hover table-striped table-sm border align-middle mb-0">
+              <thead class="table-dark sticky-top">
+                <tr>
+                  <th style="width: 100px;">Código</th>
+                  <th>Descripción del Rubro</th>
+                  <th class="text-end" style="width: 120px;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyRubros">
+                <tr><td colspan="3" class="text-center text-muted py-3">Cargando rubros...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="button" class="btn btn-primary px-4 fw-bold" onclick="guardarArticulo()">💾 Guardar Artículo</button>
-        </div>
-
       </div>
     </div>
   </div>
 
-  <!-- ======================================================= -->
-  <!-- MODAL: GESTIÓN DE RUBROS                                -->
-  <!-- ======================================================= -->
-  <div class="modal fade" id="modalRubros" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
-      <div class="modal-content">
-        
-        <div class="modal-header bg-dark text-white">
-          <h5 class="modal-title">📁 Administrar Rubros / Categorías</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+  <!-- 3. VISTA DE CLIENTES -->
+  <div id="seccionClientes" class="d-none">
+    <div class="container-fluid my-3">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-2">
+          <h5 class="mb-0 fs-6 fw-bold">👤 Catálogo de Clientes</h5>
+          <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="abrirModalCrearCliente()">
+            ➕ Nuevo Cliente
+          </button>
         </div>
+        <div class="card-body p-2">
+          <div class="row g-2 mb-2">
+            <div class="col-md-6 col-lg-4">
+              <input type="text" class="form-control form-control-sm" id="inputBuscarCliente" placeholder="🔍 Buscar por Razón Social, CUIT o Código...">
+            </div>
+          </div>
+          <div class="table-responsive style-scrollbar" style="max-height: 65vh;">
+            <table class="table table-hover table-striped table-sm border align-middle mb-0">
+              <thead class="table-dark sticky-top">
+                <tr>
+                  <th style="width: 80px;">Código</th>
+                  <th>Razón Social / Nombre</th>
+                  <th>CUIT</th>
+                  <th>Situación IVA</th>
+                  <th>Teléfono / Celular</th>
+                  <th>Email</th>
+                  <th class="text-end" style="width: 100px;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbodyClientes">
+                <tr><td colspan="7" class="text-center text-muted py-3">Cargando clientes...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="modal-body px-4">
-          <div id="alertaRubro" class="mb-2"></div>
+  <!-- MODAL ARTÍCULO -->
+  <div class="modal fade" id="modalArticulo" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h5 class="modal-title fs-6 fw-bold">📦 Gestión de Artículo</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formArticulo" onsubmit="return false;">
+            <div class="row g-2">
+              <div class="col-md-3">
+                <label class="form-label fw-bold small mb-1">Prefijo</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="codigo_prefijo" placeholder="PIN">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-bold small mb-1">Sufijo</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="codigo_sufijo" placeholder="001">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold small mb-1">Código Final (*)</label>
+                <input type="text" class="form-control form-control-sm fw-bold" id="codigo_articulo" readonly>
+              </div>
+              <div class="col-md-12">
+                <label class="form-label fw-bold small mb-1">Descripción (*)</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="descripcion_articulo" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold small mb-1">Rubro (*)</label>
+                <select class="form-select form-select-sm" id="rubro_articulo" required></select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold small mb-1">Precio Venta ($)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm text-end fw-bold" id="precio_venta" value="0.00">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold small mb-1">Ancho (cm)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="ancho" value="0.00">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold small mb-1">Alto (cm)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="alto" value="0.00">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold small mb-1">Superficie (cm²)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="superficie" readonly value="0.00">
+              </div>
+              <div class="col-md-12">
+                <label class="form-label fw-bold small mb-1">📷 Fotografía del Producto</label>
+                <input type="file" class="form-control form-control-sm" id="inputFotoArticulo" accept="image/*">
+                <div id="contenedorPreview" class="mt-2 text-center border rounded p-2 bg-light d-none">
+                  <img id="imgVistaPrevia" src="" class="img-fluid rounded shadow-sm" style="max-height: 150px;" alt="Vista Previa">
+                  <div class="mt-2">
+                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="quitarImagenSeleccionada()">🗑️ Quitar Imagen</button>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-12">
+                <label class="form-label fw-bold small mb-1">Observaciones</label>
+                <textarea class="form-control form-control-sm text-uppercase-input" id="obs" rows="2"></textarea>
+              </div>
+            </div>
+          </form>
+          <div id="alertaArticuloModal" class="mt-2"></div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="guardarArticulo()">💾 Guardar Artículo</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-          <!-- Formulario de ingreso de Rubros -->
+  <!-- MODAL RUBRO -->
+  <div class="modal fade" id="modalRubro" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h5 class="modal-title fs-6 fw-bold">📁 Gestión de Rubro</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
           <form id="formRubro" onsubmit="return false;">
             <input type="hidden" id="rubroEsEdicion" value="false">
-            
-            <div class="row g-2 mb-3 align-items-end">
-              <div class="col-md-3">
-                <label for="inputCodigoRubro" class="form-label fw-bold small">Código (*)</label>
-                <input type="number" id="inputCodigoRubro" class="form-control fw-bold" placeholder="Ej: 2" min="1" required>
-              </div>
-              <div class="col-md-6">
-                <label for="inputNombreRubro" class="form-label fw-bold small">Descripción (*)</label>
-                <input type="text" id="inputNombreRubro" class="form-control text-uppercase-input" placeholder="Nombre del Rubro..." required>
-              </div>
-              <div class="col-md-3 d-flex gap-1">
-                <button class="btn btn-secondary btn-sm w-50 d-none" type="button" id="btnCancelarRubro" onclick="limpiarFormRubro()">❌ Cancelar</button>
-                <button class="btn btn-primary btn-sm fw-bold w-100" type="button" id="btnGuardarRubro" onclick="guardarRubro()">➕ Agregar</button>
-              </div>
+            <div class="mb-2">
+              <label class="form-label fw-bold small mb-1">Código (*)</label>
+              <input type="number" class="form-control form-control-sm fw-bold" id="inputCodigoRubro" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label fw-bold small mb-1">Descripción (*)</label>
+              <input type="text" class="form-control form-control-sm text-uppercase-input" id="inputNombreRubro" required>
             </div>
           </form>
-
-          <hr class="my-3">
-
-          <!-- Tabla de Rubros con Scroll Interno y Distribución de Ancho -->
-<div class="table-responsive border rounded" style="max-height: 280px; overflow-y: auto; overflow-x: auto;">
-  <table class="table table-sm table-hover align-middle mb-0 w-100">
-    <thead class="table-light sticky-top" style="z-index: 10;">
-      <tr>
-        <th style="width: 20%;">Código</th>
-        <th style="width: 50%;">Descripción</th>
-        <th class="text-center" style="width: 30%;">Acciones</th>
-      </tr>
-    </thead>
-    <tbody id="tablaRubros">
-      <tr>
-        <td colspan="3" class="text-center text-muted py-3">Cargando rubros...</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-
-        <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+          <div id="alertaRubroModal" class="mt-2"></div>
         </div>
-
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm fw-bold" onclick="guardarRubro()">💾 Guardar Rubro</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ======================================================= -->
-  <!-- SCRIPTS (Bootstrap JS primero, luego la lógica propia)   -->
-  <!-- ======================================================= -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script src="/js/rubros.js"></script>
-<script src="/js/articulos.js"></script>
+  <!-- MODAL CLIENTE -->
+  <div class="modal fade" id="modalCliente" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h5 class="modal-title fs-6 fw-bold">👤 Gestión de Cliente</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formCliente" onsubmit="return false;">
+            <div class="row g-2">
+              <div class="col-md-3">
+                <label for="codigo_cliente" class="form-label fw-bold small mb-1">Código (*)</label>
+                <input type="number" class="form-control form-control-sm fw-bold" id="codigo_cliente" required placeholder="Ej: 100">
+              </div>
+              <div class="col-md-9">
+                <label for="nombre_cliente" class="form-label fw-bold small mb-1">Razón Social / Nombre (*)</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="nombre_cliente" required>
+              </div>
+              <div class="col-md-6">
+                <label for="nombre_fantasia" class="form-label fw-bold small mb-1">Nombre Fantasía</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="nombre_fantasia">
+              </div>
+              <div class="col-md-6">
+                <label for="cuit" class="form-label fw-bold small mb-1">CUIT</label>
+                <input type="text" class="form-control form-control-sm" id="cuit">
+              </div>
+              <div class="col-md-6">
+                <label for="situacioniva" class="form-label fw-bold small mb-1">Situación IVA (*)</label>
+                <select class="form-select form-select-sm" id="situacioniva" required></select>
+              </div>
+              <div class="col-md-6">
+                <label for="condicion_venta" class="form-label fw-bold small mb-1">Condición de Venta (*)</label>
+                <select class="form-select form-select-sm" id="condicion_venta" required></select>
+              </div>
+              <div class="col-md-4">
+                <label for="telefono" class="form-label fw-bold small mb-1">Teléfono</label>
+                <input type="text" class="form-control form-control-sm" id="telefono">
+              </div>
+              <div class="col-md-4">
+                <label for="celular" class="form-label fw-bold small mb-1">Celular</label>
+                <input type="text" class="form-control form-control-sm" id="celular">
+              </div>
+              <div class="col-md-4">
+                <label for="contacto" class="form-label fw-bold small mb-1">Contacto</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="contacto">
+              </div>
+              <div class="col-md-6">
+                <label for="mail" class="form-label fw-bold small mb-1">Email</label>
+                <input type="email" class="form-control form-control-sm text-lowercase" id="mail">
+              </div>
+              <div class="col-md-6">
+                <label for="web" class="form-label fw-bold small mb-1">Web</label>
+                <input type="text" class="form-control form-control-sm text-lowercase" id="web">
+              </div>
+              <div class="col-md-9">
+                <label for="direccion" class="form-label fw-bold small mb-1">Dirección</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="direccion">
+              </div>
+              <div class="col-md-3">
+                <label for="cod_postal" class="form-label fw-bold small mb-1">C.P.</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="cod_postal">
+              </div>
+              <div class="col-md-12">
+                <label for="obs" class="form-label fw-bold small mb-1">Observaciones</label>
+                <textarea class="form-control form-control-sm text-uppercase-input" id="obs" rows="2"></textarea>
+              </div>
+            </div>
+          </form>
+          <div id="alertaClienteModal" class="mt-2"></div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="guardarCliente()">💾 Guardar Cliente</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    function mostrarSeccion(seccion) {
+      const sArt = document.getElementById('seccionArticulos');
+      const sRub = document.getElementById('seccionRubros');
+      const sCli = document.getElementById('seccionClientes');
+      
+      const bArt = document.getElementById('btnNavArticulos');
+      const bRub = document.getElementById('btnNavRubros');
+      const bCli = document.getElementById('btnNavClientes');
+
+      [bArt, bRub, bCli].forEach(b => { 
+        if (b) { 
+          b.classList.replace('btn-primary', 'btn-outline-light'); 
+          b.classList.remove('active'); 
+        }
+      });
+      [sArt, sRub, sCli].forEach(s => { if (s) s.classList.add('d-none'); });
+
+      if (seccion === 'articulos') {
+        sArt?.classList.remove('d-none'); 
+        bArt?.classList.replace('btn-outline-light', 'btn-primary'); 
+        bArt?.classList.add('active');
+        if (typeof cargarArticulos === 'function') cargarArticulos();
+      } else if (seccion === 'rubros') {
+        sRub?.classList.remove('d-none'); 
+        bRub?.classList.replace('btn-outline-light', 'btn-primary'); 
+        bRub?.classList.add('active');
+        if (typeof cargarRubrosTabla === 'function') cargarRubrosTabla();
+      } else if (seccion === 'clientes') {
+        sCli?.classList.remove('d-none'); 
+        bCli?.classList.replace('btn-outline-light', 'btn-primary'); 
+        bCli?.classList.add('active');
+        if (typeof cargarClientes === 'function') cargarClientes();
+      }
+    }
+    window.mostrarSeccion = mostrarSeccion;
+  </script>
+
+  <script src="/js/articulos.js"></script>
+  <script src="/js/rubros.js"></script>
+  <script src="/js/clientes.js"></script>
 </body>
 </html>

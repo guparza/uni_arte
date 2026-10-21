@@ -1,169 +1,142 @@
-// public/js/rubros.js (FILTRADO COMBINADO CÓDIGO + TEXTO)
+// public/js/rubros.js - Módulo de Rubros UniArte
+
 let rubrosData = [];
-let modalRubrosInstancia = null;
+let timerBusquedaRubro = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-  const modalEl = document.getElementById('modalRubros');
-  if (modalEl && typeof bootstrap !== 'undefined') {
-    modalRubrosInstancia = new bootstrap.Modal(modalEl);
-  }
-
-  const formRubro = document.getElementById('formRubro');
-  const inputCodigo = document.getElementById('inputCodigoRubro');
-  const inputNombre = document.getElementById('inputNombreRubro');
-
-  if (formRubro) {
-    // 🎯 Auto-seleccionar texto al recibir foco
-    [inputCodigo, inputNombre].forEach(input => {
-      if (input) {
-        input.addEventListener('focus', () => {
-          setTimeout(() => {
-            if (typeof input.select === 'function') input.select();
-          }, 50);
-        });
-      }
-    });
-
-    // ⌨️ Navegación con tecla Enter entre campos
-    formRubro.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (e.target === inputCodigo) {
-          inputNombre?.focus();
-        } else if (e.target === inputNombre) {
-          guardarRubro();
-        }
-      }
-    });
-  }
-
-  // 🔍 FILTRADO DUAL EN TIEMPO REAL (Por código y por texto de descripción)
-  const aplicarFiltroRubros = () => {
-    const esEdicion = document.getElementById('rubroEsEdicion')?.value === 'true';
-    if (esEdicion) return; // En modo edición no se filtra la tabla
-
-    const codValor = inputCodigo?.value.trim() || '';
-    const descValor = inputNombre?.value.trim().toLowerCase() || '';
-
-    if (!codValor && !descValor) {
-      renderizarTablaRubros(rubrosData);
-      return;
-    }
-
-    const filtrados = rubrosData.filter(r => {
-      const coincideCodigo = codValor ? String(r.codigo).startsWith(codValor) : true;
-      const coincideDesc = descValor ? String(r.descripcion || '').toLowerCase().includes(descValor) : true;
-      return coincideCodigo && coincideDesc;
-    });
-
-    renderizarTablaRubros(filtrados);
-  };
-
-  if (inputCodigo) inputCodigo.addEventListener('input', aplicarFiltroRubros);
-  if (inputNombre) inputNombre.addEventListener('input', aplicarFiltroRubros);
-});
-
-// 📁 Abrir Modal de Rubros
-function abrirModalRubros() {
-  limpiarFormRubro();
   cargarRubrosTabla();
 
-  if (!modalRubrosInstancia) {
-    const modalEl = document.getElementById('modalRubros');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-      modalRubrosInstancia = new bootstrap.Modal(modalEl);
-    }
+  const inputBuscarRubro = document.getElementById('inputBuscarRubro');
+  if (inputBuscarRubro) {
+    inputBuscarRubro.addEventListener('input', (e) => {
+      clearTimeout(timerBusquedaRubro);
+      timerBusquedaRubro = setTimeout(() => {
+        const valor = e.target.value.trim().toLowerCase();
+        if (!valor) {
+          renderizarTablaRubros(rubrosData);
+          return;
+        }
+        const filtrados = rubrosData.filter(r => 
+          String(r.codigo).toLowerCase().includes(valor) || 
+          String(r.descripcion || '').toLowerCase().includes(valor)
+        );
+        renderizarTablaRubros(filtrados);
+      }, 200);
+    });
   }
+});
 
-  if (modalRubrosInstancia) {
-    modalRubrosInstancia.show();
-    setTimeout(() => {
-      document.getElementById('inputCodigoRubro')?.focus();
-    }, 400);
+// 📁 Abrir Modal para Nuevo Rubro
+function abrirModalCrearRubro() {
+  limpiarFormRubro();
+
+  const modalEl = document.getElementById('modalRubro') || document.getElementById('modalRubros');
+  if (modalEl && typeof bootstrap !== 'undefined') {
+    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.show();
+    setTimeout(() => document.getElementById('inputCodigoRubro')?.focus(), 350);
   }
 }
 
-// 📋 Cargar lista desde la API
+// 📋 Cargar catálogo de rubros desde la API
 async function cargarRubrosTabla() {
-  const tbody = document.getElementById('tablaRubros');
+  const tbody = document.getElementById('tbodyRubros') || document.getElementById('tablaRubros');
   if (!tbody) return;
 
   try {
     tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando rubros...</td></tr>';
     const res = await fetch('/api/rubros');
     const resultado = await res.json();
+    const lista = resultado.data || resultado.datos || [];
 
-    if (resultado.success && Array.isArray(resultado.data)) {
-      // Ordenar por código numérico de menor a mayor
-      rubrosData = resultado.data.sort((a, b) => Number(a.codigo) - Number(b.codigo));
+    if (resultado.success && Array.isArray(lista)) {
+      rubrosData = lista.sort((a, b) => Number(a.codigo) - Number(b.codigo));
       renderizarTablaRubros(rubrosData);
     } else {
       rubrosData = [];
       tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay rubros registrados.</td></tr>';
     }
   } catch (error) {
-    console.error('Error al cargar tabla de rubros:', error);
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Error de conexión.</td></tr>';
+    console.error('❌ Error al cargar tabla de rubros:', error);
   }
 }
 
-// 🎨 Renderizar filas en la tabla garantizando visibilidad total de los botones
+// 🎨 Renderizar filas
 function renderizarTablaRubros(lista) {
-  const tbody = document.getElementById('tablaRubros');
+  const tbody = document.getElementById('tbodyRubros') || document.getElementById('tablaRubros');
   if (!tbody) return;
 
   if (lista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No se encontraron códigos coincidentes.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No se encontraron rubros.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = lista.map(r => {
-    const descEscapada = String(r.descripcion || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  tbody.innerHTML = lista.map(r => `
+    <tr>
+      <td class="fw-bold align-middle">${r.codigo}</td>
+      <td class="align-middle fw-semibold">${r.descripcion || '-'}</td>
+      <td class="text-end align-middle">
+        <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" onclick="prepararEdicionRubro('${r.codigo}')" title="Editar">✏️</button>
+        <button class="btn btn-sm btn-outline-danger px-2 py-0" onclick="eliminarRubro('${r.codigo}')" title="Eliminar">🗑️</button>
+      </td>
+    </tr>
+  `).join('');
+}
 
-    return `
-      <tr>
-        <td class="fw-bold text-secondary">${r.codigo}</td>
-        <td>${r.descripcion}</td>
-        <td class="text-center text-nowrap">
-          <div class="d-flex justify-content-center gap-1">
-            <button class="btn btn-sm btn-primary py-0 px-2" 
-                    onclick="editarRubro(${r.codigo}, '${descEscapada}')"
-                    title="Editar rubro">
-              ✏️ Editar
-            </button>
-            <button class="btn btn-sm btn-danger py-0 px-2" 
-                    onclick="eliminarRubro(${r.codigo})"
-                    title="Eliminar rubro">
-              🗑️ Eliminar
-            </button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
+// ✏️ Cargar rubro en el modal desde la memoria local
+function prepararEdicionRubro(codigo) {
+  // Buscar el rubro directamente en la lista local ya cargada
+  const r = rubrosData.find(item => item.codigo == codigo);
+
+  if (!r) {
+    console.error('❌ No se encontró el rubro en la lista local:', codigo);
+    return;
+  }
+
+  const inputCodigo = document.getElementById('inputCodigoRubro');
+  const inputNombre = document.getElementById('inputNombreRubro');
+  const inputEdicion = document.getElementById('rubroEsEdicion');
+  const alertaDiv = document.getElementById('alertaRubroModal') || document.getElementById('alertaRubro');
+
+  if (alertaDiv) alertaDiv.innerHTML = '';
+
+  if (inputCodigo) {
+    inputCodigo.value = r.codigo;
+    inputCodigo.readOnly = true; // Bloquea la clave primaria al editar
+  }
+  if (inputNombre) inputNombre.value = r.descripcion || '';
+  if (inputEdicion) inputEdicion.value = 'true'; // Activa el modo edición (PUT)
+
+  const modalEl = document.getElementById('modalRubro') || document.getElementById('modalRubros');
+  if (modalEl && typeof bootstrap !== 'undefined') {
+    const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    modal.show();
+    setTimeout(() => inputNombre?.focus(), 350);
+  }
 }
 
 // 💾 Guardar o Actualizar Rubro
 async function guardarRubro() {
   const inputCodigo = document.getElementById('inputCodigoRubro');
   const inputNombre = document.getElementById('inputNombreRubro');
-  const esEdicion = document.getElementById('rubroEsEdicion')?.value === 'true';
-  const alertaDiv = document.getElementById('alertaRubro');
+  const inputEdicion = document.getElementById('rubroEsEdicion');
+  const alertaDiv = document.getElementById('alertaRubroModal') || document.getElementById('alertaRubro');
 
-  const codigo = parseInt(inputCodigo?.value);
-  const descripcion = (inputNombre?.value || '').trim().toUpperCase();
+  const esEdicion = inputEdicion?.value === 'true';
+  const codigoVal = inputCodigo?.value.trim();
+  const descripcionVal = inputNombre?.value.trim().toUpperCase();
+  const codigo = parseInt(codigoVal);
 
-  if (isNaN(codigo) || codigo < 0) {
+  if (!codigoVal || isNaN(codigo) || codigo < 0) {
     if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-warning py-1 small">Ingresá un código numérico válido.</div>';
-    inputCodigo?.focus();
     return;
   }
-  if (!descripcion) {
-    if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-warning py-1 small">Escribí la descripción del rubro.</div>';
-    inputNombre?.focus();
+  if (!descripcionVal) {
+    if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-warning py-1 small">Ingresá la descripción del rubro.</div>';
     return;
   }
 
+  // Define la URL y método HTTP según corresponda (PUT para actualizar, POST para crear)
   const url = esEdicion ? `/api/rubros/${codigo}` : '/api/rubros';
   const metodo = esEdicion ? 'PUT' : 'POST';
 
@@ -171,77 +144,41 @@ async function guardarRubro() {
     const res = await fetch(url, {
       method: metodo,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codigo, descripcion })
+      body: JSON.stringify({ codigo, descripcion: descripcionVal, nombre: descripcionVal })
     });
+
     const resultado = await res.json();
 
     if (resultado.success) {
+      const modalEl = document.getElementById('modalRubro') || document.getElementById('modalRubros');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.hide();
+      }
       limpiarFormRubro();
       await cargarRubrosTabla();
-      
-      // Sincronizar el selector desplegable de artículos si la función existe
-      if (typeof window.cargarRubrosSelect === 'function') {
-        window.cargarRubrosSelect();
-      }
-      
-      document.getElementById('inputCodigoRubro')?.focus();
     } else {
       if (alertaDiv) alertaDiv.innerHTML = `<div class="alert alert-danger py-1 small">${resultado.mensaje}</div>`;
     }
   } catch (error) {
-    console.error('Error al guardar rubro:', error);
-    if (alertaDiv) alertaDiv.innerHTML = '<div class="alert alert-danger py-1 small">Error de conexión.</div>';
+    console.error('❌ Error al guardar rubro:', error);
   }
-}
-
-// ✏️️ Cargar rubro para editar
-function editarRubro(codigo, descripcion) {
-  const inputCodigo = document.getElementById('inputCodigoRubro');
-  const inputNombre = document.getElementById('inputNombreRubro');
-
-  if (inputCodigo) {
-    inputCodigo.value = codigo;
-    inputCodigo.readOnly = true;
-  }
-  if (inputNombre) inputNombre.value = descripcion;
-  
-  const inputEdicion = document.getElementById('rubroEsEdicion');
-  if (inputEdicion) inputEdicion.value = 'true';
-
-  const btnGuardar = document.getElementById('btnGuardarRubro');
-  const btnCancelar = document.getElementById('btnCancelarRubro');
-
-  if (btnGuardar) btnGuardar.innerText = '💾 Guardar';
-  if (btnCancelar) btnCancelar.classList.remove('d-none');
-
-  renderizarTablaRubros(rubrosData);
-  inputNombre?.focus();
 }
 
 // ❌ Limpiar formulario
 function limpiarFormRubro() {
   const inputCodigo = document.getElementById('inputCodigoRubro');
   const inputNombre = document.getElementById('inputNombreRubro');
+  const inputEdicion = document.getElementById('rubroEsEdicion');
+  const alertaDiv = document.getElementById('alertaRubroModal') || document.getElementById('alertaRubro');
 
   if (inputCodigo) {
     inputCodigo.value = '';
     inputCodigo.readOnly = false;
   }
   if (inputNombre) inputNombre.value = '';
-  
-  const inputEdicion = document.getElementById('rubroEsEdicion');
   if (inputEdicion) inputEdicion.value = 'false';
-
-  const alertaDiv = document.getElementById('alertaRubro');
   if (alertaDiv) alertaDiv.innerHTML = '';
-
-  const btnGuardar = document.getElementById('btnGuardarRubro');
-  const btnCancelar = document.getElementById('btnCancelarRubro');
-
-  if (btnGuardar) btnGuardar.innerText = '➕ Agregar';
-  if (btnCancelar) btnCancelar.classList.add('d-none');
-
-  renderizarTablaRubros(rubrosData);
 }
 
 // 🗑️ Eliminar Rubro
@@ -254,22 +191,20 @@ async function eliminarRubro(codigo) {
 
     if (resultado.success) {
       await cargarRubrosTabla();
-      if (typeof window.cargarRubrosSelect === 'function') {
-        window.cargarRubrosSelect();
-      }
     } else {
       alert(`⚠️ ${resultado.mensaje}`);
     }
   } catch (error) {
-    console.error('Error al eliminar rubro:', error);
-    alert('Error al conectar con el servidor.');
+    console.error('❌ Error al eliminar rubro:', error);
   }
 }
 
-// Exposición global de funciones
-window.abrirModalRubros = abrirModalRubros;
+// Exposición global
+window.abrirModalCrearRubro = abrirModalCrearRubro;
+window.abrirModalRubros = abrirModalCrearRubro;
 window.guardarRubro = guardarRubro;
-window.editarRubro = editarRubro;
+window.prepararEdicionRubro = prepararEdicionRubro;
+window.editarRubro = prepararEdicionRubro;
 window.limpiarFormRubro = limpiarFormRubro;
 window.eliminarRubro = eliminarRubro;
 window.cargarRubrosTabla = cargarRubrosTabla;

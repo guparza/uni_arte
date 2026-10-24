@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
       params.push(termino, termino, termino);
     }
 
-    sql += ` ORDER BY a.codigo ASC LIMIT 50`;
+    sql += ` ORDER BY a.descripcion ASC, a.codigo ASC`;
 
     const [rows] = await db.query(sql, params);
     res.json({ success: true, datos: rows });

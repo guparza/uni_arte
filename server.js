@@ -39,10 +39,12 @@ const upload = multer({ storage });
 const articulosRoutes = require('./src/routes/articulos');
 const rubrosRoutes = require('./src/routes/rubros');
 const clientesRoutes = require('./src/routes/clientes');
+const pedidosRoutes = require('./src/routes/pedidos');
 
 app.use('/api/articulos', articulosRoutes);
 app.use('/api/rubros', rubrosRoutes);
 app.use('/api/clientes', clientesRoutes);
+app.use('/api/pedidos', pedidosRoutes);
 
 // Endpoint de subida física de fotografía de producto
 app.post('/api/articulos/upload', upload.single('imagen'), (req, res) => {

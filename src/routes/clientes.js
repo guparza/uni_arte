@@ -1,220 +1,210 @@
-// src/routes/clientes.js - Módulo Completo de Clientes UniArte
+// src/routes/clientes.js - API para Gestión de Clientes UniArte
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db'); // Conexión a la base de datos MySQL
+const db = require('../config/db');
 
-// 1. GET /api/clientes/auxiliares - Obtener listas de Sit. IVA y Condición de Venta
-router.get('/auxiliares', async (req, res) => {
+// Helper para desempaquetar filas de MySQL
+const extraerFilaUnica = (rows) => {
+  let r = rows;
+  while (Array.isArray(r) && r.length > 0) {
+    r = r;
+  }
+  return r;
+};
+
+// 1. GET /api/clientes/listas-cabecera
+router.get('/listas-cabecera', async (req, res) => {
   try {
-    const [situaciones] = await db.query('SELECT codigo, descripcion FROM situacionesiva ORDER BY codigo ASC');
-    const [condiciones] = await db.query('SELECT codigo, descripcion FROM condiciones_venta ORDER BY codigo ASC');
-
-    res.json({
-      success: true,
-      situacionesIva: situaciones || [],
-      condicionesVenta: condiciones || []
-    });
+    const [rows] = await db.query('SELECT orden, descripcion FROM listas_precios_cabecera ORDER BY orden ASC');
+    res.json({ success: true, datos: rows });
   } catch (error) {
-    console.error('❌ Error al obtener auxiliares de clientes:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al cargar datos auxiliares.' });
+    console.error('❌ Error al obtener listas de precios:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al obtener listas de precios.' });
   }
 });
 
-// 2. GET /api/clientes - Obtener lista de clientes con búsqueda y LIMIT 50
+// 2. GET /api/clientes/situacionesiva
+router.get('/situacionesiva', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT codigo, descripcion FROM situacionesiva ORDER BY descripcion ASC');
+    res.json({ success: true, datos: rows });
+  } catch (error) {
+    res.json({ success: false, datos: [] });
+  }
+});
+
+// 3. GET /api/clientes/condicionesventa
+router.get('/condicionesventa', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT codigo, descripcion FROM condiciones_venta ORDER BY descripcion ASC');
+    res.json({ success: true, datos: rows });
+  } catch (error) {
+    res.json({ success: false, datos: [] });
+  }
+});
+
+// 4. GET /api/clientes
 router.get('/', async (req, res) => {
   try {
     const { buscar } = req.query;
-
     let sql = `
-      SELECT 
-        c.codigo, 
-        c.nombre, 
-        c.nombre_fantasia, 
-        c.cuit, 
-        c.telefono, 
-        c.celular, 
-        c.mail, 
-        s.descripcion AS situacion_iva_desc,
-        cv.descripcion AS condicion_venta_desc
+      SELECT c.codigo, c.nombre, c.nombre_fantasia, c.cuit, c.situacioniva, c.condicion_venta, 
+             c.telefono, c.celular, c.contacto, c.mail, c.web, c.direccion, c.cod_postal, c.obs,
+             clp.lista_precios, lpc.descripcion AS lista_nombre,
+             siva.descripcion AS situacioniva_desc
       FROM clientes c
-      LEFT JOIN situacionesiva s ON c.situacioniva = s.codigo
-      LEFT JOIN condiciones_venta cv ON c.condicion_venta = cv.codigo
+      LEFT JOIN clientes_listas_precios clp ON clp.cliente = c.codigo
+      LEFT JOIN listas_precios_cabecera lpc ON lpc.orden = clp.lista_precios
+      LEFT JOIN situacionesiva siva ON siva.codigo = c.situacioniva
     `;
     let params = [];
 
     if (buscar && buscar.trim() !== '') {
-      sql += ` WHERE c.nombre LIKE ? OR c.nombre_fantasia LIKE ? OR c.cuit LIKE ? OR c.codigo = ?`;
-      const termino = `%${buscar.trim()}%`;
-      const codigoNum = parseInt(buscar.trim()) || 0;
-      params.push(termino, termino, termino, codigoNum);
+      sql += ` WHERE c.codigo LIKE ? OR c.nombre LIKE ? OR c.cuit LIKE ? OR c.nombre_fantasia LIKE ?`;
+      const term = `%${buscar.trim()}%`;
+      params.push(term, term, term, term);
     }
 
-    sql += ` ORDER BY c.codigo ASC LIMIT 50`;
+    sql += ` ORDER BY c.nombre ASC`;
 
     const [rows] = await db.query(sql, params);
     res.json({ success: true, datos: rows });
   } catch (error) {
-    console.error('❌ Error al consultar catálogo de clientes:', error);
+    console.error('❌ Error al consultar clientes:', error);
     res.status(500).json({ success: false, mensaje: 'Error al obtener la lista de clientes.' });
   }
 });
 
-// 3. GET /api/clientes/:codigo - Obtener un cliente por código para edición
+// 5. GET /api/clientes/:codigo
 router.get('/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
-    const [rows] = await db.query('SELECT * FROM clientes WHERE codigo = ?', [codigo]);
+    console.log("📥 Servidor recibió petición para el cliente:", codigo);
+    
+    const sql = `
+      SELECT c.*, clp.lista_precios 
+      FROM clientes c 
+      LEFT JOIN clientes_listas_precios clp ON clp.cliente = c.codigo 
+      WHERE c.codigo = ?
+    `;
+    const [rows] = await db.query(sql, [codigo]);
+    console.log("✅ Consulta SQL ejecutada con éxito. Registros encontrados:", rows ? rows.length : 0);
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, mensaje: 'Cliente no encontrado.' });
     }
 
-    res.json({ success: true, dato: rows });
+    // Extracción directa y segura sin usar extraerFilaUnica para evitar bloqueos
+    const clienteObj = Array.isArray(rows[0]) ? rows[0] : rows[0];
+
+    console.log("📤 Enviando respuesta JSON al cliente con éxito.");
+    return res.json({ success: true, dato: clienteObj });
+
   } catch (error) {
-    console.error('❌ Error al consultar cliente:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al consultar datos del cliente.' });
+    console.error('❌ Error crítico al consultar cliente:', error);
+    return res.status(500).json({ success: false, mensaje: 'Error al obtener datos del cliente.' });
   }
 });
-
-// 4. POST /api/clientes - Crear nuevo cliente (Asignación automática de código)
+// 6. POST /api/clientes
 router.post('/', async (req, res) => {
+  const connection = await db.getConnection();
   try {
-    const {
-      codigo, nombre, nombre_fantasia, direccion, localidad,
-      cod_postal, mail, web, situacioniva, cuit,
-      condicion_venta, telefono, celular, contacto, obs
-    } = req.body;
+    await connection.beginTransaction();
 
-    const nombreLimpio = (nombre || '').trim().toUpperCase();
-    if (!nombreLimpio) {
-      return res.status(400).json({ success: false, mensaje: 'La Razón Social / Nombre es obligatoria.' });
-    }
+    const { codigo, nombre, nombre_fantasia, cuit, situacioniva, condicion_venta, telefono, celular, contacto, mail, web, direccion, cod_postal, obs, lista_precios } = req.body;
 
-    // Generar código de cliente automático si no se envía uno manual
-let codigoFinal = parseInt(codigo);
-if (!codigo || isNaN(codigoFinal) || codigoFinal <= 0) {
-  const [rows] = await db.query('SELECT COALESCE(MAX(codigo), 0) + 1 AS siguiente FROM clientes');
-  codigoFinal = rows[0].siguiente; // 👈 rows[0] accede al primer objeto del arreglo
-}
-    // Fallbacks seguros para claves foráneas
-    const sitIvaVal = (situacioniva !== undefined && situacioniva !== null && situacioniva !== '') 
-      ? String(situacioniva).trim() 
-      : '0';
-
-    const condVentaVal = parseInt(condicion_venta) || 0;
-    const localidadVal = parseInt(localidad) || 0;
-
-    const sql = `
-      INSERT INTO clientes 
-      (codigo, nombre, nombre_fantasia, direccion, localidad, cod_postal, mail, web, situacioniva, cuit, condicion_venta, telefono, celular, contacto, obs)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    const sqlCliente = `
+      INSERT INTO clientes (codigo, nombre, nombre_fantasia, cuit, situacioniva, condicion_venta, telefono, celular, contacto, mail, web, direccion, cod_postal, obs)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
-
-    await db.query(sql, [
-      codigoFinal,
-      nombreLimpio,
-      (nombre_fantasia || '').trim().toUpperCase(),
-      (direccion || '').trim().toUpperCase(),
-      localidadVal,
-      (cod_postal || '').trim().toUpperCase(),
-      (mail || '').trim().toLowerCase(),
-      (web || '').trim().toLowerCase(),
-      sitIvaVal,
-      (cuit || '').trim(),
-      condVentaVal,
-      (telefono || '').trim(),
-      (celular || '').trim(),
-      (contacto || '').trim().toUpperCase(),
-      (obs || '').trim().toUpperCase()
+    await connection.query(sqlCliente, [
+      codigo, nombre, nombre_fantasia || '', cuit || '', situacioniva || null, condicion_venta || null,
+      telefono || '', celular || '', contacto || '', mail || '', web || '', direccion || '', cod_postal || '', obs || ''
     ]);
 
-    res.json({ success: true, mensaje: `Cliente #${codigoFinal} creado exitosamente.` });
+    if (lista_precios && parseInt(lista_precios) > 0) {
+      await connection.query(
+        'INSERT INTO clientes_listas_precios (cliente, lista_precios, prioridad) VALUES (?, ?, 1)',
+        [codigo, parseInt(lista_precios)]
+      );
+    }
+
+    await connection.commit();
+    res.json({ success: true, mensaje: 'Cliente registrado correctamente.' });
   } catch (error) {
-    console.error('❌ Error al guardar cliente en BBDD:', error);
-
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ success: false, mensaje: 'El código de cliente ya existe.' });
-    }
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ success: false, mensaje: 'La Situación IVA, Condición de Venta o Localidad seleccionada no existe en la base de datos.' });
-    }
-
-    res.status(500).json({ success: false, mensaje: 'Error interno al guardar el cliente.' });
+    await connection.rollback();
+    console.error('❌ Error al crear cliente:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al guardar el cliente.' });
+  } finally {
+    connection.release();
   }
 });
 
-// 5. PUT /api/clientes/:codigo - Actualizar cliente existente
+// 7. PUT /api/clientes/:codigo
 router.put('/:codigo', async (req, res) => {
+  const connection = await db.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { codigo } = req.params;
-    const {
-      nombre, nombre_fantasia, direccion, localidad,
-      cod_postal, mail, web, situacioniva, cuit,
-      condicion_venta, telefono, celular, contacto, obs
-    } = req.body;
+    const { nombre, nombre_fantasia, cuit, situacioniva, condicion_venta, telefono, celular, contacto, mail, web, direccion, cod_postal, obs, lista_precios } = req.body;
 
-    const nombreLimpio = (nombre || '').trim().toUpperCase();
-    if (!nombreLimpio) {
-      return res.status(400).json({ success: false, mensaje: 'La Razón Social / Nombre es obligatoria.' });
-    }
-
-    const sitIvaVal = (situacioniva !== undefined && situacioniva !== null && situacioniva !== '') 
-      ? String(situacioniva).trim() 
-      : '0';
-
-    const sql = `
-      UPDATE clientes SET 
-        nombre = ?, 
-        nombre_fantasia = ?, 
-        direccion = ?, 
-        localidad = ?, 
-        cod_postal = ?, 
-        mail = ?, 
-        web = ?, 
-        situacioniva = ?, 
-        cuit = ?, 
-        condicion_venta = ?, 
-        telefono = ?, 
-        celular = ?, 
-        contacto = ?, 
-        obs = ?
+    const sqlCliente = `
+      UPDATE clientes 
+      SET nombre = ?, nombre_fantasia = ?, cuit = ?, situacioniva = ?, condicion_venta = ?, 
+          telefono = ?, celular = ?, contacto = ?, mail = ?, web = ?, direccion = ?, cod_postal = ?, obs = ?
       WHERE codigo = ?
     `;
-
-    await db.query(sql, [
-      nombreLimpio,
-      (nombre_fantasia || '').trim().toUpperCase(),
-      (direccion || '').trim().toUpperCase(),
-      parseInt(localidad) || 0,
-      (cod_postal || '').trim().toUpperCase(),
-      (mail || '').trim().toLowerCase(),
-      (web || '').trim().toLowerCase(),
-      sitIvaVal,
-      (cuit || '').trim(),
-      parseInt(condicion_venta) || 0,
-      (telefono || '').trim(),
-      (celular || '').trim(),
-      (contacto || '').trim().toUpperCase(),
-      (obs || '').trim().toUpperCase(),
+    await connection.query(sqlCliente, [
+      nombre, nombre_fantasia || '', cuit || '', situacioniva || null, condicion_venta || null,
+      telefono || '', celular || '', contacto || '', mail || '', web || '', direccion || '', cod_postal || '', obs || '',
       codigo
     ]);
 
+    await connection.query('DELETE FROM clientes_listas_precios WHERE cliente = ?', [codigo]);
+
+    if (lista_precios && parseInt(lista_precios) > 0) {
+      await connection.query(
+        'INSERT INTO clientes_listas_precios (cliente, lista_precios, prioridad) VALUES (?, ?, 1)',
+        [codigo, parseInt(lista_precios)]
+      );
+    }
+
+    await connection.commit();
     res.json({ success: true, mensaje: 'Cliente actualizado correctamente.' });
   } catch (error) {
+    await connection.rollback();
     console.error('❌ Error al actualizar cliente:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al actualizar datos del cliente.' });
+    res.status(500).json({ success: false, mensaje: 'Error al actualizar el cliente.' });
+  } finally {
+    connection.release();
   }
 });
 
-// 6. DELETE /api/clientes/:codigo - Eliminar cliente
+// 8. DELETE /api/clientes/:codigo
 router.delete('/:codigo', async (req, res) => {
+  const connection = await db.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { codigo } = req.params;
-    await db.query('DELETE FROM clientes WHERE codigo = ?', [codigo]);
+
+    await connection.query('DELETE FROM clientes_listas_precios WHERE cliente = ?', [codigo]);
+    const [result] = await connection.query('DELETE FROM clientes WHERE codigo = ?', [codigo]);
+
+    if (result.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, mensaje: 'Cliente no encontrado.' });
+    }
+
+    await connection.commit();
     res.json({ success: true, mensaje: 'Cliente eliminado correctamente.' });
   } catch (error) {
+    await connection.rollback();
     console.error('❌ Error al eliminar cliente:', error);
     res.status(500).json({ success: false, mensaje: 'Error al eliminar el cliente.' });
+  } finally {
+    connection.release();
   }
 });
 

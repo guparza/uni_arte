@@ -3,28 +3,33 @@
 let modoEdicionCliente = false;
 let timerBusquedaCliente = null;
 
-// Helper flexible para asignar valores aceptando tanto "cliente_campo" como "campo"
-function setVal(id, val) {
-  let el = document.getElementById(id);
-  if (!el && id.startsWith('cliente_')) {
-    el = document.getElementById(id.replace('cliente_', ''));
-  } else if (!el) {
-    el = document.getElementById('cliente_' + id);
+// Helper flexible de lectura de inputs (Prueba múltiples IDs hasta encontrar el valor)
+function getVal(ids) {
+  const lista = Array.isArray(ids) ? ids : [ids, 'cliente_' + ids, 'codigo_' + ids, ids.replace('cliente_', '').replace('codigo_', '')];
+  for (const id of lista) {
+    if (!id) continue;
+    const el = document.getElementById(id);
+    if (el && el.value !== undefined && el.value !== null) {
+      const val = el.value.trim();
+      if (val !== '') return val;
+    }
   }
-  if (el) {
-    el.value = (val !== null && val !== undefined) ? val : '';
-  }
+  return '';
 }
 
-// Helper flexible para leer valores de inputs
-function getVal(id) {
-  let el = document.getElementById(id);
-  if (!el && id.startsWith('cliente_')) {
-    el = document.getElementById(id.replace('cliente_', ''));
-  } else if (!el) {
-    el = document.getElementById('cliente_' + id);
+// Helper flexible para escribir valores en inputs
+function setVal(ids, valor) {
+  const lista = Array.isArray(ids) ? ids : [ids, 'cliente_' + ids, 'codigo_' + ids, ids.replace('cliente_', '').replace('codigo_', '')];
+  const valLimpio = (valor !== null && valor !== undefined) ? valor : '';
+  for (const id of lista) {
+    if (!id) continue;
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = valLimpio;
+      return true;
+    }
   }
-  return el ? el.value.trim() : '';
+  return false;
 }
 
 // 1. Cargar Listas de Precios (Cabecera)
@@ -103,7 +108,7 @@ async function cargarClientes(buscar = '') {
 
       let html = '';
       data.datos.forEach(item => {
-        const c = Array.isArray(item) ? item : item;
+        const c = Array.isArray(item) ? item[0] : item;
         if (!c || typeof c !== 'object') return;
 
         const cod = c.codigo !== undefined && c.codigo !== null ? c.codigo : '-';
@@ -125,7 +130,7 @@ async function cargarClientes(buscar = '') {
             <td class="align-middle small">${mail}</td>
             <td class="align-middle text-center">${lista}</td>
             <td class="text-end align-middle">
-              <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" title="Editar" onclick="prepararEdicionCliente('${String(cod).trim()}')">✏️</button>
+              <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" title="Editar" onclick="prepararEdicionCliente('${cod}')">✏️</button>
               <button class="btn btn-sm btn-outline-danger px-2 py-0" title="Eliminar" onclick="eliminarCliente('${cod}')">🗑️</button>
             </td>
           </tr>`;
@@ -144,7 +149,7 @@ async function abrirModalCrearCliente() {
   const form = document.getElementById('formCliente');
   if (form) form.reset();
 
-  const inputCodigo = document.getElementById('cliente_codigo') || document.getElementById('codigo_cliente');
+  const inputCodigo = document.getElementById('cliente_codigo') || document.getElementById('codigo_cliente') || document.getElementById('codigo');
   if (inputCodigo) inputCodigo.readOnly = false;
 
   const alerta = document.getElementById('alertaClienteModal');
@@ -159,68 +164,58 @@ async function abrirModalCrearCliente() {
   }
 }
 
+// 5. ✏️ Cargar Cliente para Edición (Código en sólo lectura)
 async function prepararEdicionCliente(codigo) {
   try {
     modoEdicionCliente = true;
     await cargarAuxiliaresClientes();
 
-    //console.log("🔍 Consultando API para editar cliente:", codigo);
     const res = await fetch(`/api/clientes/${codigo}`);
     const data = await res.json();
-    
-    console.log("📦 Datos devueltos por el servidor:", data);
 
-    if (!data.success || !data.dato) {
-      alert('❌ El servidor no devolvió datos válidos para este cliente.');
-      return;
+    if (data.success && data.dato) {
+      let cliente = data.dato;
+      if (Array.isArray(cliente) && cliente.length > 0) {
+        cliente = cliente[0];
+      }
+
+      if (!cliente || typeof cliente !== 'object') {
+        alert('❌ No se encontraron los datos del cliente.');
+        return;
+      }
+
+      // Asignar Código y bloquearlo para edición
+      setVal(['cliente_codigo', 'codigo_cliente', 'codigo'], cliente.codigo);
+      const inputCodigo = document.getElementById('cliente_codigo') || document.getElementById('codigo_cliente') || document.getElementById('codigo');
+      if (inputCodigo) inputCodigo.readOnly = true;
+
+      // Cargar demás campos
+      setVal(['cliente_nombre', 'nombre_cliente', 'nombre'], cliente.nombre);
+      setVal(['cliente_nombre_fantasia', 'nombre_fantasia'], cliente.nombre_fantasia);
+      setVal(['cliente_cuit', 'cuit'], cliente.cuit);
+      setVal(['cliente_situacioniva', 'situacioniva'], cliente.situacioniva || cliente.situacion_iva);
+      setVal(['cliente_condicion_venta', 'condicion_venta'], cliente.condicion_venta);
+      setVal(['cliente_lista_precios', 'lista_precios'], cliente.lista_precios);
+      setVal(['cliente_telefono', 'telefono'], cliente.telefono);
+      setVal(['cliente_celular', 'celular'], cliente.celular);
+      setVal(['cliente_contacto', 'contacto'], cliente.contacto);
+      setVal(['cliente_mail', 'mail'], cliente.mail);
+      setVal(['cliente_web', 'web'], cliente.web);
+      setVal(['cliente_direccion', 'direccion'], cliente.direccion);
+      setVal(['cliente_cod_postal', 'cod_postal'], cliente.cod_postal);
+      setVal(['cliente_obs', 'obs'], cliente.obs);
+
+      const alerta = document.getElementById('alertaClienteModal');
+      if (alerta) alerta.innerHTML = '';
+
+      const modalEl = document.getElementById('modalCliente');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+      }
     }
-
-    let cliente = data.dato;
-    if (Array.isArray(cliente) && cliente.length > 0) {
-      cliente = cliente[0];
-    }
-
-    if (!cliente || typeof cliente !== 'object') {
-      alert('❌ El formato del cliente recibido no es un objeto válido.');
-      return;
-    }
-
-    // Asignación de valores al formulario
-    setVal('codigo_cliente', cliente.codigo);
-
-    const inputCodigo = document.getElementById('codigo_cliente') || document.getElementById('cliente_codigo');
-    if (inputCodigo) inputCodigo.readOnly = true;
-
-    setVal('nombre_cliente', cliente.nombre);
-    setVal('nombre_fantasia', cliente.nombre_fantasia);
-    setVal('cuit', cliente.cuit);
-    setVal('cliente_situacioniva', cliente.situacioniva);
-    setVal('cliente_condicion_venta', cliente.condicion_venta);
-    setVal('cliente_lista_precios', cliente.lista_precios);
-    setVal('telefono', cliente.telefono);
-    setVal('celular', cliente.celular);
-    setVal('contacto', cliente.contacto);
-    setVal('mail', cliente.mail);
-    setVal('web', cliente.web);
-    setVal('direccion', cliente.direccion);
-    setVal('cod_postal', cliente.cod_postal);
-    setVal('obs', cliente.obs || cliente.observaciones);
-
-    const alerta = document.getElementById('alertaClienteModal');
-    if (alerta) alerta.innerHTML = '';
-
-    // Apertura forzada del modal de Bootstrap
-    const modalEl = document.getElementById('modalCliente');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-      modal.show();
-    } else {
-      alert('❌ Error: No se encontró el modal #modalCliente o Bootstrap no está cargado.');
-    }
-
   } catch (error) {
-    console.error('❌ Error crítico al preparar la edición:', error);
-    alert('❌ Ocurrió un error en la consola al intentar editar el cliente.');
+    console.error('❌ Error al obtener datos del cliente:', error);
   }
 }
 
@@ -229,8 +224,8 @@ async function guardarCliente() {
   const alerta = document.getElementById('alertaClienteModal');
   if (alerta) alerta.innerHTML = '';
 
-  const codigo = getVal('cliente_codigo');
-  const nombre = getVal('cliente_nombre');
+  const codigo = getVal(['cliente_codigo', 'codigo_cliente', 'codigo']);
+  const nombre = getVal(['cliente_nombre', 'nombre_cliente', 'nombre']);
 
   if (!codigo || !nombre) {
     if (alerta) alerta.innerHTML = '<div class="alert alert-warning py-1 small">El código y la razón social son obligatorios.</div>';
@@ -240,19 +235,19 @@ async function guardarCliente() {
   const payload = {
     codigo: parseInt(codigo),
     nombre: nombre.toUpperCase(),
-    nombre_fantasia: getVal('cliente_nombre_fantasia').toUpperCase(),
-    cuit: getVal('cliente_cuit'),
-    situacioniva: getVal('cliente_situacioniva') || null,
-    condicion_venta: getVal('cliente_condicion_venta') || null,
-    lista_precios: getVal('cliente_lista_precios') || null,
-    telefono: getVal('cliente_telefono'),
-    celular: getVal('cliente_celular'),
-    contacto: getVal('cliente_contacto').toUpperCase(),
-    mail: getVal('cliente_mail'),
-    web: getVal('cliente_web'),
-    direccion: getVal('cliente_direccion').toUpperCase(),
-    cod_postal: getVal('cliente_cod_postal'),
-    obs: getVal('cliente_obs').toUpperCase()
+    nombre_fantasia: getVal(['cliente_nombre_fantasia', 'nombre_fantasia']).toUpperCase(),
+    cuit: getVal(['cliente_cuit', 'cuit']),
+    situacioniva: getVal(['cliente_situacioniva', 'situacioniva']) || null,
+    condicion_venta: getVal(['cliente_condicion_venta', 'condicion_venta']) || null,
+    lista_precios: getVal(['cliente_lista_precios', 'lista_precios']) || null,
+    telefono: getVal(['cliente_telefono', 'telefono']),
+    celular: getVal(['cliente_celular', 'celular']),
+    contacto: getVal(['cliente_contacto', 'contacto']).toUpperCase(),
+    mail: getVal(['cliente_mail', 'mail']),
+    web: getVal(['cliente_web', 'web']),
+    direccion: getVal(['cliente_direccion', 'direccion']).toUpperCase(),
+    cod_postal: getVal(['cliente_cod_postal', 'cod_postal']),
+    obs: getVal(['cliente_obs', 'obs']).toUpperCase()
   };
 
   const url = modoEdicionCliente ? `/api/clientes/${codigo}` : '/api/clientes';
@@ -300,41 +295,26 @@ async function eliminarCliente(codigo) {
   }
 }
 
-// 8. Inicialización de eventos al cargar la vista
+// 8. Inicialización
 document.addEventListener('DOMContentLoaded', () => {
   cargarClientes();
 
-  // Escucha del Buscador en Tiempo Real con re-intento si el elemento se renderiza tarde
-  const inicializarBuscadorClientes = () => {
-    const inputBuscar = document.getElementById('inputBuscarCliente');
-    if (inputBuscar && !inputBuscar.dataset.listenerAsignado) {
-      inputBuscar.dataset.listenerAsignado = "true";
-      inputBuscar.addEventListener('input', () => {
-        clearTimeout(timerBusquedaCliente);
-        timerBusquedaCliente = setTimeout(() => {
-          cargarClientes(inputBuscar.value.trim());
-        }, 200);
-      });
-    }
-  };
-
-  inicializarBuscadorClientes();
-
-  // Por si acaso, re-verificamos al hacer clic en la pestaña de clientes
-  const btnClientes = document.getElementById('btnNavClientes');
-  if (btnClientes) {
-    btnClientes.addEventListener('click', () => {
-      setTimeout(inicializarBuscadorClientes, 100);
+  const inputBuscar = document.getElementById('inputBuscarCliente');
+  if (inputBuscar) {
+    inputBuscar.addEventListener('input', () => {
+      clearTimeout(timerBusquedaCliente);
+      timerBusquedaCliente = setTimeout(() => {
+        cargarClientes(inputBuscar.value.trim());
+      }, 200);
     });
   }
 
-  // Foco con auto-selección
   document.querySelectorAll('#modalCliente input').forEach(input => {
     input.addEventListener('focus', function () { this.select(); });
   });
 });
 
-// Exposición global para llamados HTML
+// Exposición global
 window.abrirModalCrearCliente = abrirModalCrearCliente;
 window.prepararEdicionCliente = prepararEdicionCliente;
 window.guardarCliente = guardarCliente;

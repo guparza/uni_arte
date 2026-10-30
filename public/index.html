@@ -52,22 +52,21 @@
             </div>
           </div>
           <div class="table-responsive style-scrollbar" style="max-height: 65vh;">
-            <table class="table table-hover table-striped table-sm border align-middle mb-0">
-              <thead class="table-dark sticky-top">
-  <tr>
-    <th style="width: 100px;">Código</th>
-    <th>Descripción</th>
-    <th>Rubro</th>
-    <th class="text-end">Precio Venta</th>
-    <th class="text-center">Medidas</th>
-    <th class="text-center">Superficie</th>
-    <th class="text-end" style="width: 100px;">Acciones</th>
-  </tr>
-</thead>
-              <tbody id="tbodyArticulos">
-                <tr><td colspan="7" class="text-center text-muted py-3">Cargando artículos...</td></tr>
-              </tbody>
-            </table>
+            <table class="table table-sm table-striped table-hover align-middle border">
+  <thead class="table-dark sticky-top">
+    <tr>
+      <th>Código</th>
+      <th>Descripción</th>
+      <th>Rubro</th>
+      <th class="text-end text-nowrap">Medidas (cm)</th>
+      <th class="text-end text-nowrap">Superficie (m²)</th>
+      <th class="text-end text-nowrap">Peso (kg)</th>
+      <th class="text-end text-nowrap">Precio Minorista ($)</th>
+      <th class="text-end text-nowrap">Acciones</th>
+    </tr>
+  </thead>
+  <tbody id="tbodyArticulos"></tbody>
+</table>
           </div>
         </div>
       </div>
@@ -128,19 +127,19 @@
           <div class="table-responsive style-scrollbar" style="max-height: 65vh;">
             <table class="table table-hover table-striped table-sm border align-middle mb-0">
               <thead class="table-dark sticky-top">
-  <tr>
-    <th style="width: 80px;">Código</th>
-    <th>Razón Social / Nombre</th>
-    <th>CUIT</th>
-    <th>Situación IVA</th>
-    <th>Teléfono / Celular</th>
-    <th>Email</th>
-    <th class="text-center">Lista</th> <!-- ACÁ VA LA NUEVA COLUMNA -->
-    <th class="text-end" style="width: 100px;">Acciones</th>
-  </tr>
-</thead>
+                <tr>
+                  <th style="width: 80px;">Código</th>
+                  <th>Razón Social / Nombre</th>
+                  <th>CUIT</th>
+                  <th>Situación IVA</th>
+                  <th>Teléfono / Celular</th>
+                  <th>Email</th>
+                  <th class="text-center">Lista</th>
+                  <th class="text-end" style="width: 100px;">Acciones</th>
+                </tr>
+              </thead>
               <tbody id="tbodyClientes">
-                <tr><td colspan="7" class="text-center text-muted py-3">Cargando clientes...</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-3">Cargando clientes...</td></tr>
               </tbody>
             </table>
           </div>
@@ -149,7 +148,7 @@
     </div>
   </div>
 
-  <!-- 4. VISTA DE PEDIDOS (NUEVO MÓDULO) -->
+  <!-- 4. VISTA DE PEDIDOS -->
   <div id="seccionPedidos" class="d-none">
     <div class="container-fluid my-3">
       <div class="card shadow-sm border-0">
@@ -187,78 +186,109 @@
     </div>
   </div>
 
-  <!-- MODAL ARTÍCULO -->
-  <div class="modal fade" id="modalArticulo" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header bg-dark text-white py-2">
-          <h5 class="modal-title fs-6 fw-bold">📦 Gestión de Artículo</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <form id="formArticulo" onsubmit="return false;">
-            <div class="row g-2">
-              <div class="col-md-3">
-                <label class="form-label fw-bold small mb-1">Prefijo</label>
-                <input type="text" class="form-control form-control-sm text-uppercase-input" id="codigo_prefijo" placeholder="PIN">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label fw-bold small mb-1">Sufijo</label>
-                <input type="text" class="form-control form-control-sm text-uppercase-input" id="codigo_sufijo" placeholder="001">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold small mb-1">Código Final (*)</label>
-                <input type="text" class="form-control form-control-sm fw-bold" id="codigo_articulo" readonly>
-              </div>
-              <div class="col-md-12">
-                <label class="form-label fw-bold small mb-1">Descripción (*)</label>
-                <input type="text" class="form-control form-control-sm text-uppercase-input" id="descripcion_articulo" required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold small mb-1">Rubro (*)</label>
-                <select class="form-select form-select-sm" id="rubro_articulo" required></select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold small mb-1">Precio Venta ($)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm text-end fw-bold" id="precio_venta" value="0.00">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold small mb-1">Ancho (cm)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="ancho" value="0.00">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold small mb-1">Alto (cm)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="alto" value="0.00">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label fw-bold small mb-1">Superficie (cm²)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm text-end" id="superficie" readonly value="0.00">
-              </div>
-              <div class="col-md-12">
-                <label class="form-label fw-bold small mb-1">📷 Fotografía del Producto</label>
-                <input type="file" class="form-control form-control-sm" id="inputFotoArticulo" accept="image/*">
-                <div id="contenedorPreview" class="mt-2 text-center border rounded p-2 bg-light d-none">
-                  <img id="imgVistaPrevia" src="" class="img-fluid rounded shadow-sm" style="max-height: 150px;" alt="Vista Previa">
-                  <div class="mt-2">
-                    <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2" onclick="quitarImagenSeleccionada()">🗑️ Quitar Imagen</button>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-12">
-                <label class="form-label fw-bold small mb-1">Observaciones</label>
-                <textarea class="form-control form-control-sm text-uppercase-input" id="obs" rows="2"></textarea>
+  <!-- 📦 MODAL ARTÍCULOS -->
+<div class="modal fade" id="modalArticulo" tabindex="-1" aria-labelledby="modalArticuloLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      
+      <!-- Encabezado del Modal -->
+      <div class="modal-header bg-primary text-white py-2">
+        <h5 class="modal-title fs-6" id="modalArticuloLabel">📦 Gestión de Artículo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <!-- Cuerpo del Modal -->
+      <div class="modal-body">
+        <div id="alertaArticuloModal"></div>
+
+        <form id="formArticulo" autocomplete="off" onsubmit="event.preventDefault(); guardarArticulo();">
+          
+          <!-- 🔤 SECCIÓN CÓDIGO: PREFIJO, SUFIJO Y CÓDIGO FINAL -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <label for="codigo_prefijo" class="form-label small fw-bold mb-1">Prefijo</label>
+              <input type="text" class="form-control form-control-sm text-uppercase" id="codigo_prefijo" placeholder="Ej: 508">
+            </div>
+            <div class="col-md-4">
+              <label for="codigo_sufijo" class="form-label small fw-bold mb-1">Sufijo</label>
+              <input type="text" class="form-control form-control-sm text-uppercase" id="codigo_sufijo" placeholder="Ej: 2LETRAS">
+            </div>
+            <div class="col-md-5">
+              <label for="codigo_articulo" class="form-label small fw-bold mb-1">Código Final</label>
+              <input type="text" class="form-control form-control-sm bg-light fw-bold text-primary" id="codigo_articulo" readonly placeholder="Se arma automáticamente">
+            </div>
+          </div>
+
+          <!-- DESCRIPCIÓN Y RUBRO -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-7">
+              <label for="articulo_descripcion" class="form-label small fw-bold mb-1">Descripción <span class="text-danger">*</span></label>
+              <input type="text" class="form-control form-control-sm text-uppercase" id="articulo_descripcion" required placeholder="DESCRIPCIÓN DEL ARTÍCULO">
+            </div>
+            <div class="col-md-5">
+              <label for="articulo_rubro" class="form-label small fw-bold mb-1">Rubro</label>
+              <select class="form-select form-select-sm" id="articulo_rubro">
+                <option value="0">-- Seleccionar Rubro --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- MEDIDAS, SUPERFICIE, PESO Y PRECIO -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <label for="articulo_ancho" class="form-label small mb-1">Ancho (cm)</label>
+              <input type="number" step="0.01" class="form-control form-control-sm text-end" id="articulo_ancho" value="0">
+            </div>
+            <div class="col-md-3">
+              <label for="articulo_alto" class="form-label small mb-1">Alto (cm)</label>
+              <input type="number" step="0.01" class="form-control form-control-sm text-end" id="articulo_alto" value="0">
+            </div>
+            <div class="col-md-2">
+              <label for="articulo_superficie" class="form-label small mb-1">Sup. (m²)</label>
+              <input type="text" class="form-control form-control-sm text-end bg-light" id="articulo_superficie" readonly value="0.0000">
+            </div>
+            <div class="col-md-2">
+              <label for="articulo_peso" class="form-label small mb-1">Peso (kg)</label>
+              <input type="number" step="0.001" class="form-control form-control-sm text-end" id="articulo_peso" value="0.000">
+            </div>
+            <div class="col-md-2">
+              <label for="articulo_precio" class="form-label small mb-1">Precio ($)</label>
+              <input type="number" step="1" class="form-control form-control-sm text-end" id="articulo_precio" value="0">
+            </div>
+          </div>
+
+          <!-- OBSERVACIONES -->
+          <div class="mb-3">
+            <label for="articulo_obs" class="form-label small mb-1">Observaciones</label>
+            <textarea class="form-control form-control-sm text-uppercase" id="articulo_obs" rows="2" placeholder="Notas adicionales del artículo..."></textarea>
+          </div>
+
+          <!-- FOTO Y VISTA PREVIA -->
+          <div class="row g-2 align-items-center">
+            <div class="col-md-8">
+              <label for="articulo_foto" class="form-label small mb-1">Imagen / Fotografía (.png)</label>
+              <input type="file" class="form-control form-control-sm" id="articulo_foto" accept="image/png, image/jpeg" onchange="mostrarVistaPreviaFoto(this)">
+            </div>
+            <div class="col-md-4 text-center">
+              <div id="contenedorPreview" class="d-none border rounded p-1 position-relative d-inline-block">
+                <img id="imgVistaPrevia" src="" alt="Vista previa" style="max-height: 80px; width: auto;" class="img-fluid rounded">
+                <button type="button" id="btn_quitar_imagen" class="btn btn-danger btn-sm position-absolute top-0 end-0 py-0 px-1" onclick="quitarImagenSeleccionada()" style="display: none;" title="Quitar imagen">&times;</button>
               </div>
             </div>
-          </form>
-          <div id="alertaArticuloModal" class="mt-2"></div>
-        </div>
-        <div class="modal-footer py-2">
-          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-          <button type="button" class="btn btn-primary btn-sm fw-bold px-3" onclick="guardarArticulo()">💾 Guardar Artículo</button>
-        </div>
+          </div>
+
+        </form>
       </div>
+
+      <!-- Pie del Modal -->
+      <div class="modal-footer py-1">
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sm btn-primary px-3" onclick="guardarArticulo()">💾 Guardar</button>
+      </div>
+
     </div>
   </div>
+</div>
 
   <!-- MODAL RUBRO -->
   <div class="modal fade" id="modalRubro" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
@@ -317,8 +347,6 @@
                 <label for="cuit" class="form-label fw-bold small mb-1">CUIT</label>
                 <input type="text" class="form-control form-control-sm" id="cuit">
               </div>
-
-              <!-- BLOQUE CORREGIDO: IVA, CONDICIÓN VENTA Y LISTA DE PRECIOS -->
               <div class="col-md-4">
                 <label for="cliente_situacioniva" class="form-label fw-bold small mb-1">Situación IVA (*)</label>
                 <select class="form-select form-select-sm" id="cliente_situacioniva" required>
@@ -337,8 +365,6 @@
                   <option value="">-- Lista Predeterminada (Sin Descuento) --</option>
                 </select>
               </div>
-              <!-- FIN BLOQUE CORREGIDO -->
-
               <div class="col-md-4">
                 <label for="telefono" class="form-label fw-bold small mb-1">Teléfono</label>
                 <input type="text" class="form-control form-control-sm" id="telefono">
@@ -383,118 +409,127 @@
     </div>
   </div>
 
-  <!-- MODAL PEDIDO (CON BUSCADORES DINÁMICOS) -->
-<div class="modal fade" id="modalPedido" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white py-2">
-        <h5 class="modal-title fs-6 fw-bold" id="modalPedidoTitulo">🛒 Registro de Pedido / Venta</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form id="formPedido" onsubmit="return false;">
-          <div class="row g-2 mb-3">
-            <div class="col-md-2">
-              <label class="form-label fw-bold small mb-1">Nº Control</label>
-              <input type="text" class="form-control form-control-sm fw-bold bg-light" id="pedido_control" readonly placeholder="Auto">
-            </div>
+  <!-- MODAL PEDIDO -->
+  <div class="modal fade" id="modalPedido" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white py-2">
+          <h5 class="modal-title fs-6 fw-bold" id="modalPedidoTitulo">🛒 Registro de Pedido / Venta</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formPedido" onsubmit="return false;">
             
-            <!-- BUSCADOR DINÁMICO DE CLIENTE -->
-            <div class="col-md-5">
-              <label class="form-label fw-bold small mb-1">Cliente (*)</label>
-              <input type="text" class="form-control form-control-sm text-uppercase-input" id="input_pedido_cliente" list="dl_clientes" placeholder="🔍 Tipeá nombre o código de cliente...">
-              <datalist id="dl_clientes"></datalist>
-              <input type="hidden" id="pedido_cliente">
-            </div>
-
-            <div class="col-md-2">
-              <label class="form-label fw-bold small mb-1">Fecha (*)</label>
-              <input type="date" class="form-control form-control-sm" id="pedido_fecha" required>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label fw-bold small mb-1">Estado</label>
-              <select class="form-select form-select-sm fw-bold" id="pedido_estado">
-                <option value="0">0 - Pendiente</option>
-                <option value="1">1 - En proceso</option>
-                <option value="2">2 - Facturado</option>
-                <option value="3">3 - Presupuestado</option>
-                <option value="4">4 - Cancelado</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- BLOQUE DE AGREGAR ÍTEMS CON BUSCADOR PREDICTIVO -->
-          <div class="card border p-2 mb-3 bg-light">
-            <h6 class="fw-bold small mb-2 text-dark">➕ Agregar Artículo al Pedido</h6>
-            <div class="row g-2 align-items-end">
-              
-              <!-- BUSCADOR DINÁMICO DE ARTÍCULO -->
+            <div class="row g-2 mb-3">
+              <div class="col-md-2">
+                <label class="form-label fw-bold small mb-1">Nº Control</label>
+                <input type="text" class="form-control form-control-sm fw-bold bg-light" id="pedido_control" readonly placeholder="Auto">
+              </div>
               <div class="col-md-5">
-                <label class="form-label small mb-1 fw-bold">Buscar Artículo</label>
-                <input type="text" class="form-control form-control-sm text-uppercase-input" id="input_item_articulo" list="dl_articulos" placeholder="🔍 Tipeá código o descripción...">
+                <label class="form-label fw-bold small mb-1">Cliente (*)</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="input_pedido_cliente" list="dl_clientes" placeholder="🔍 Tipeá nombre o código de cliente...">
+                <datalist id="dl_clientes"></datalist>
+                <input type="hidden" id="pedido_cliente">
+              </div>
+              <div class="col-md-2">
+                <label class="form-label fw-bold small mb-1">Fecha (*)</label>
+                <input type="date" class="form-control form-control-sm" id="pedido_fecha" required>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label fw-bold small mb-1">Estado</label>
+                <select class="form-select form-select-sm fw-bold" id="pedido_estado">
+                  <option value="0">0 - Pendiente</option>
+                  <option value="1">1 - En proceso</option>
+                  <option value="2">2 - Facturado</option>
+                  <option value="3">3 - Presupuestado</option>
+                  <option value="4">4 - Cancelado</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Fila Dinámica de Carga de Ítems (Artículos o Conceptos) -->
+            <div class="row g-2 mb-2 bg-light p-2 rounded border align-items-end">
+              <div class="col-md-2">
+                <label class="form-label fw-bold small mb-1">Tipo Ítem</label>
+                <select class="form-select form-select-sm" id="item_tipo_selector" onchange="alternarTipoItemPedido()">
+                  <option value="articulo" selected>📦 Artículo</option>
+                  <option value="concepto">🟡 Concepto</option>
+                </select>
+              </div>
+
+              <!-- Contenedor para Artículo -->
+              <div class="col-md-5" id="div_articulo_input">
+                <label class="form-label fw-bold small mb-1">Artículo</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="input_item_articulo" list="dl_articulos" placeholder="Buscar código o descripción...">
                 <datalist id="dl_articulos"></datalist>
                 <input type="hidden" id="item_articulo">
               </div>
 
+              <!-- Contenedor para Concepto (Oculto por defecto) -->
+              <div class="col-md-5 d-none" id="div_concepto_input">
+                <label class="form-label fw-bold small mb-1">Concepto de Venta</label>
+                <select class="form-select form-select-sm" id="select_item_concepto">
+                  <option value="">-- Seleccionar Concepto --</option>
+                </select>
+              </div>
+
               <div class="col-md-2">
-                <label class="form-label small mb-1 fw-bold">Precio Unit ($)</label>
+                <label class="form-label fw-bold small mb-1">Precio Unit ($)</label>
                 <input type="number" step="0.01" class="form-control form-control-sm text-end fw-bold" id="item_precio" value="0.00">
               </div>
-              <div class="col-md-2">
-                <label class="form-label small mb-1 fw-bold">Cantidad</label>
-                <input type="number" min="1" class="form-control form-control-sm text-end fw-bold" id="item_cantidad" value="1">
-              </div>
-              <div class="col-md-3 text-end">
-                <button type="button" class="btn btn-success btn-sm w-100 fw-bold" onclick="agregarItemADetalle()">
-                  ➕ Agregar Ítem
-                </button>
-              </div>
-            </div>
-          </div>
 
-          <!-- GRILLA DE DETALLE DE PEDIDO -->
-          <div class="table-responsive style-scrollbar mb-2" style="max-height: 30vh;">
-            <table class="table table-sm table-bordered table-hover align-middle mb-0">
-              <thead class="table-dark">
-                <tr>
-                  <th style="width: 110px;">Código</th>
-                  <th>Descripción del Artículo</th>
-                  <th class="text-end" style="width: 100px;">Cant.</th>
-                  <th class="text-end" style="width: 120px;">P. Unit.</th>
-                  <th class="text-end" style="width: 130px;">Subtotal</th>
-                  <th class="text-center" style="width: 60px;">Acción</th>
-                </tr>
-              </thead>
-              <tbody id="tbodyPedidoDetalle">
-                <tr><td colspan="6" class="text-center text-muted py-2">No se han agregado artículos al pedido.</td></tr>
-              </tbody>
-            </table>
-          </div>
+              <div class="col-md-1">
+                <label class="form-label fw-bold small mb-1">Cant.</label>
+                <input type="number" class="form-control form-control-sm text-center fw-bold" id="item_cantidad" value="1" min="1">
+              </div>
 
-          <!-- PIE DE TOTALES Y OBS -->
-          <div class="row g-2 align-items-center">
-            <div class="col-md-8">
-              <label class="form-label fw-bold small mb-1">Observaciones</label>
-              <input type="text" class="form-control form-control-sm text-uppercase-input" id="pedido_obs" placeholder="Ej: Entregar por la mañana...">
+              <div class="col-md-2 text-end">
+                <button type="button" class="btn btn-sm btn-success w-100 fw-bold" onclick="agregarItemADetalle()">➕ Agregar</button>
+              </div>
             </div>
-            <div class="col-md-4 text-end">
-              <span class="fs-6 fw-bold me-2">TOTAL PEDIDO:</span>
-              <span class="fs-5 fw-bold text-success" id="lblTotalPedido">$ 0.00</span>
+
+            <!-- GRILLA DE DETALLE DE PEDIDO -->
+            <div class="table-responsive style-scrollbar mb-2" style="max-height: 30vh;">
+              <table class="table table-sm table-bordered table-hover align-middle mb-0">
+                <thead class="table-dark">
+                  <tr>
+                    <th style="width: 110px;">Código</th>
+                    <th>Descripción del Artículo / Concepto</th>
+                    <th class="text-end" style="width: 100px;">Cant.</th>
+                    <th class="text-end" style="width: 120px;">P. Unit.</th>
+                    <th class="text-end" style="width: 130px;">Subtotal</th>
+                    <th class="text-center" style="width: 60px;">Acción</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyPedidoDetalle">
+                  <tr><td colspan="6" class="text-center text-muted py-2">No se han agregado artículos al pedido.</td></tr>
+                </tbody>
+              </table>
             </div>
-          </div>
-        </form>
-        <div id="alertaPedidoModal" class="mt-2"></div>
-      </div>
-      <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-primary btn-sm fw-bold px-4" onclick="guardarPedido()">💾 Guardar Pedido</button>
+
+            <!-- PIE DE TOTALES Y OBS -->
+            <div class="row g-2 align-items-center">
+              <div class="col-md-8">
+                <label class="form-label fw-bold small mb-1">Observaciones</label>
+                <input type="text" class="form-control form-control-sm text-uppercase-input" id="pedido_obs" placeholder="Ej: Entregar por la mañana...">
+              </div>
+              <div class="col-md-4 text-end">
+                <span class="fs-6 fw-bold me-2">TOTAL PEDIDO:</span>
+                <span class="fs-5 fw-bold text-success" id="lblTotalPedido">$ 0.00</span>
+              </div>
+            </div>
+
+          </form>
+          <div id="alertaPedidoModal" class="mt-2"></div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+          <button type="button" class="btn btn-primary btn-sm fw-bold px-4" onclick="guardarPedido()">💾 Guardar Pedido</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-
-  <!-- LIBRERÍAS Y LOGICA DE SECCIONES -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   
   <script>
@@ -515,31 +550,28 @@
           b.classList.remove('active'); 
         }
       });
+      
       [sArt, sRub, sCli, sPed].forEach(s => { if (s) s.classList.add('d-none'); });
 
       if (seccion === 'articulos') {
-        sArt?.classList.remove('d-none'); 
-        bArt?.classList.replace('btn-outline-light', 'btn-primary'); 
-        bArt?.classList.add('active');
+        sArt?.classList.remove('d-none'); bArt?.classList.replace('btn-outline-light', 'btn-primary'); bArt?.classList.add('active');
         if (typeof cargarArticulos === 'function') cargarArticulos();
       } else if (seccion === 'rubros') {
-        sRub?.classList.remove('d-none'); 
-        bRub?.classList.replace('btn-outline-light', 'btn-primary'); 
-        bRub?.classList.add('active');
+        sRub?.classList.remove('d-none'); bRub?.classList.replace('btn-outline-light', 'btn-primary'); bRub?.classList.add('active');
         if (typeof cargarRubrosTabla === 'function') cargarRubrosTabla();
       } else if (seccion === 'clientes') {
-        sCli?.classList.remove('d-none'); 
-        bCli?.classList.replace('btn-outline-light', 'btn-primary'); 
-        bCli?.classList.add('active');
+        sCli?.classList.remove('d-none'); bCli?.classList.replace('btn-outline-light', 'btn-primary'); bCli?.classList.add('active');
         if (typeof cargarClientes === 'function') cargarClientes();
       } else if (seccion === 'pedidos') {
-        sPed?.classList.remove('d-none'); 
-        bPed?.classList.replace('btn-outline-light', 'btn-primary'); 
-        bPed?.classList.add('active');
+        sPed?.classList.remove('d-none'); bPed?.classList.replace('btn-outline-light', 'btn-primary'); bPed?.classList.add('active');
         if (typeof cargarPedidos === 'function') cargarPedidos();
       }
     }
-    window.mostrarSeccion = mostrarSeccion;
+    
+    // Iniciar con la vista de artículos
+    window.onload = () => {
+      mostrarSeccion('articulos');
+    };
   </script>
 
   <script src="/js/articulos.js"></script>

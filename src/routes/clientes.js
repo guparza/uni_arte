@@ -79,7 +79,7 @@ router.get('/', async (req, res) => {
 router.get('/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
-    console.log("📥 Servidor recibió petición para el cliente:", codigo);
+   // console.log("📥 Servidor recibió petición para el cliente:", codigo);
     
     const sql = `
       SELECT c.*, clp.lista_precios 
@@ -88,7 +88,7 @@ router.get('/:codigo', async (req, res) => {
       WHERE c.codigo = ?
     `;
     const [rows] = await db.query(sql, [codigo]);
-    console.log("✅ Consulta SQL ejecutada con éxito. Registros encontrados:", rows ? rows.length : 0);
+    //console.log("✅ Consulta SQL ejecutada con éxito. Registros encontrados:", rows ? rows.length : 0);
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, mensaje: 'Cliente no encontrado.' });
@@ -97,7 +97,7 @@ router.get('/:codigo', async (req, res) => {
     // Extracción directa y segura sin usar extraerFilaUnica para evitar bloqueos
     const clienteObj = Array.isArray(rows[0]) ? rows[0] : rows[0];
 
-    console.log("📤 Enviando respuesta JSON al cliente con éxito.");
+    //console.log("📤 Enviando respuesta JSON al cliente con éxito.");
     return res.json({ success: true, dato: clienteObj });
 
   } catch (error) {

@@ -3,7 +3,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-// Helper para convertir el número de estado a texto descriptivo
 const mapearEstado = (num) => {
   const estados = {
     '0': 'Pendiente',
@@ -15,7 +14,18 @@ const mapearEstado = (num) => {
   return estados[String(num)] || 'Pendiente';
 };
 
-// 1. GET /api/pedidos/precio-unitario - Consultar precio según lista asignada al cliente
+// 1. GET /api/pedidos/conceptos-ventas - Catálogo de Conceptos de Venta
+router.get('/conceptos-ventas', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT codigo, descripcion FROM conceptos_ventas ORDER BY descripcion ASC');
+    res.json({ success: true, datos: rows });
+  } catch (error) {
+    console.error('❌ Error al obtener conceptos de venta:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al consultar conceptos de venta.' });
+  }
+});
+
+// 2. GET /api/pedidos/precio-unitario - Cotización según la lista del cliente
 router.get('/precio-unitario', async (req, res) => {
   try {
     const { cliente, articulo } = req.query;
@@ -39,14 +49,14 @@ router.get('/precio-unitario', async (req, res) => {
 
     const [rows] = await db.query(sql, [cliente, articulo]);
 
-    if (rows.length === 0) {
+    if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado.' });
     }
 
     res.json({
       success: true,
       precio: parseFloat(rows[0].precio_unitario) || 0,
-      lista: rows[0].lista_nombre || 'Precio Base'
+      lista: rows[0].lista_nombre || 'Precio de Referencia'
     });
   } catch (error) {
     console.error('❌ Error al obtener precio unitario:', error);
@@ -54,7 +64,7 @@ router.get('/precio-unitario', async (req, res) => {
   }
 });
 
-// 2. GET /api/pedidos - Listar pedidos con búsqueda
+// 3. GET /api/pedidos - Listar pedidos
 router.get('/', async (req, res) => {
   try {
     const { buscar } = req.query;
@@ -88,7 +98,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 3. GET /api/pedidos/:control - Obtener detalle de un pedido
+// 4. GET /api/pedidos/:control - Obtener detalle (Artículos o Conceptos)
 router.get('/:control', async (req, res) => {
   try {
     const { control } = req.params;
@@ -106,9 +116,12 @@ router.get('/:control', async (req, res) => {
     }
 
     const [detalleRows] = await db.query(
-      `SELECT pd.*, a.descripcion AS articulo_desc 
+      `SELECT pd.*, 
+              a.descripcion AS articulo_desc,
+              cv.descripcion AS concepto_desc
        FROM pedidos_deta pd 
        LEFT JOIN articulos a ON pd.articulo = a.codigo 
+       LEFT JOIN conceptos_ventas cv ON pd.concepto = cv.codigo 
        WHERE pd.control = ?`,
       [control]
     );
@@ -126,7 +139,7 @@ router.get('/:control', async (req, res) => {
   }
 });
 
-// 4. POST /api/pedidos - Crear nuevo pedido
+// 5. POST /api/pedidos - Crear pedido
 router.post('/', async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -141,23 +154,19 @@ router.post('/', async (req, res) => {
 
     if (!Array.isArray(detalles) || detalles.length === 0) {
       await connection.rollback();
-      return res.status(400).json({ success: false, mensaje: 'El pedido debe incluir al menos un artículo.' });
+      return res.status(400).json({ success: false, mensaje: 'El pedido debe incluir al menos un ítem.' });
     }
 
-    // Obtener próximo número de control correlativo
     const [maxControlRows] = await connection.query('SELECT COALESCE(MAX(control), 0) + 1 AS proximoControl FROM pedidos');
     const proximoControl = maxControlRows[0].proximoControl;
 
-    // Obtener un punto de venta válido
     const [pvRows] = await connection.query('SELECT orden FROM puntos_venta ORDER BY orden ASC LIMIT 1');
     const puntoVentaId = pvRows.length > 0 ? pvRows[0].orden : 1;
 
-    // Formatear fechas correctamente (YYYY-MM-DD)
     const fechaHoy = new Date().toISOString().split('T')[0];
     const fechaFinal = fecha && fecha.trim() !== '' ? fecha : fechaHoy;
     const fechaEntregaFinal = fecha_entrega && fecha_entrega.trim() !== '' ? fecha_entrega : null;
 
-    // Insertar Cabecera en pedidos
     const sqlCabecera = `
       INSERT INTO pedidos (control, punto_venta, cliente, fecha, fecha_entrega, total, obs, estado) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -173,15 +182,15 @@ router.post('/', async (req, res) => {
       String(estado || '0')
     ]);
 
-    // Insertar Renglones en pedidos_deta
     const sqlDetalle = `
-      INSERT INTO pedidos_deta (control, articulo, precio_unit, dscto, cantidad, total) 
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO pedidos_deta (control, articulo, concepto, precio_unit, dscto, cantidad, total) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `;
     for (const item of detalles) {
       await connection.query(sqlDetalle, [
         proximoControl,
-        item.articulo,
+        item.articulo && item.articulo !== '' ? item.articulo : null,
+        item.concepto && parseInt(item.concepto) > 0 ? parseInt(item.concepto) : null,
         parseFloat(item.precio_unit) || 0,
         parseFloat(item.dscto) || 0,
         parseInt(item.cantidad) || 1,
@@ -200,7 +209,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 5. PUT /api/pedidos/:control - Actualizar pedido existente
+// 6. PUT /api/pedidos/:control - Actualizar pedido
 router.put('/:control', async (req, res) => {
   const connection = await db.getConnection();
   try {
@@ -232,13 +241,14 @@ router.put('/:control', async (req, res) => {
 
     if (Array.isArray(detalles)) {
       const sqlDetalle = `
-        INSERT INTO pedidos_deta (control, articulo, precio_unit, dscto, cantidad, total) 
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO pedidos_deta (control, articulo, concepto, precio_unit, dscto, cantidad, total) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `;
       for (const item of detalles) {
         await connection.query(sqlDetalle, [
           control,
-          item.articulo,
+          item.articulo && item.articulo !== '' ? item.articulo : null,
+          item.concepto && parseInt(item.concepto) > 0 ? parseInt(item.concepto) : null,
           parseFloat(item.precio_unit) || 0,
           parseFloat(item.dscto) || 0,
           parseInt(item.cantidad) || 1,
@@ -258,7 +268,7 @@ router.put('/:control', async (req, res) => {
   }
 });
 
-// 6. DELETE /api/pedidos/:control - Eliminar pedido
+// 7. DELETE /api/pedidos/:control - Eliminar pedido
 router.delete('/:control', async (req, res) => {
   const connection = await db.getConnection();
   try {

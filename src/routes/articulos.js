@@ -3,63 +3,146 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db'); // Conexión a la BBDD
 
-// GET /api/articulos - Consultar artículos con filtro de búsqueda
+// GET /api/articulos - Listar catálogo con precio de Lista Minorista
 router.get('/', async (req, res) => {
   try {
-    const buscar = (req.query.buscar || '').trim();
-
+    const { buscar } = req.query;
+    
+    // Asignamos alias y realizamos el JOIN con la lista de precio Minorista (orden = 1)
     let sql = `
-      SELECT a.*, r.descripcion AS rubro_desc 
-      FROM articulos a 
-      LEFT JOIN articulos_rubros r ON a.rubro = r.codigo
+      SELECT 
+        a.codigo, 
+        a.descripcion, 
+        a.rubro, 
+        r.descripcion AS rubro_desc,
+        a.ancho, 
+        a.alto, 
+        a.superficie,
+        COALESCE(lp.precio, a.precio_venta, 0) AS precio_venta
+      FROM articulos a
+      LEFT JOIN articulos_rubros r ON r.codigo = a.rubro
+      LEFT JOIN listas_precios lp ON lp.articulo = a.codigo AND lp.lista_precios = 7
     `;
-    const params = [];
+    let params = [];
 
-    if (buscar) {
-      sql += ` WHERE a.codigo LIKE ? OR a.descripcion LIKE ? OR r.descripcion LIKE ?`;
-      const termino = `%${buscar}%`;
-      params.push(termino, termino, termino);
+    if (buscar && buscar.trim() !== '') {
+      sql += ` WHERE a.codigo LIKE ? OR a.descripcion LIKE ?`;
+      const termino = `%${buscar.trim()}%`;
+      params.push(termino, termino);
     }
 
-    sql += ` ORDER BY a.descripcion ASC, a.codigo ASC`;
+    sql += ` ORDER BY a.codigo ASC LIMIT 100`;
 
     const [rows] = await db.query(sql, params);
     res.json({ success: true, datos: rows });
   } catch (error) {
     console.error('❌ Error al consultar artículos:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al consultar artículos en la base de datos.' });
+    res.status(500).json({ success: false, mensaje: 'Error al consultar catálogo de artículos.' });
   }
 });
 
-// 2. GET /api/articulos/:codigo - Obtener un artículo por código para edición
-router.get('/:codigo', async (req, res) => {
+// 2. GET /api/articulos/:codigo/precio?lista_precios=X
+// Obtiene el precio cotizado en la lista del cliente o el precio de referencia
+router.get('/:codigo/precio', async (req, res) => {
   try {
     const { codigo } = req.params;
-    const [rows] = await db.query(
-      `SELECT codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, precio_venta, 
-              llevar_stock, stock_critico, ancho, alto, superficie, tiempo_maquina, obs 
-       FROM articulos WHERE codigo = ?`, 
-      [codigo]
-    );
+    const { lista_precios } = req.query;
+
+    const sql = `
+      SELECT 
+        a.codigo, 
+        a.descripcion, 
+        a.precio_venta AS precio_referencia,
+        lp.precio AS precio_lista
+      FROM articulos a
+      LEFT JOIN listas_precios lp 
+        ON lp.articulo = a.codigo AND lp.lista_precios = ?
+      WHERE a.codigo = ?
+    `;
+
+    const [rows] = await db.query(sql, [parseInt(lista_precios) || 0, codigo]);
 
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado.' });
     }
 
-    res.json({ success: true, dato: rows });
+    const art = rows;
+
+    // Si existe cotización explícita en la lista de precios del cliente, la usa.
+    // De lo contrario, utiliza el precio de referencia del artículo.
+    const tienePrecioLista = art.precio_lista !== null && art.precio_lista !== undefined;
+    const precioCalculado = tienePrecioLista ? parseFloat(art.precio_lista) : parseFloat(art.precio_referencia || 0);
+
+    res.json({
+      success: true,
+      codigo: art.codigo,
+      descripcion: art.descripcion,
+      precio: precioCalculado,
+      origen_precio: tienePrecioLista ? 'LISTA_PRECIOS' : 'PRECIO_REFERENCIA'
+    });
   } catch (error) {
-    console.error('❌ Error al obtener artículo:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al obtener datos del artículo.' });
+    console.error('❌ Error al consultar precio cotizado:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al obtener precio del artículo.' });
+  }
+});
+
+// GET /api/articulos/:codigo - Obtener ficha completa de un artículo por código
+router.get('/:codigo', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+
+    const sql = `
+      SELECT 
+        a.codigo, 
+        a.codigo_prefijo, 
+        a.codigo_sufijo, 
+        a.descripcion, 
+        a.rubro, 
+        a.ancho, 
+        a.alto, 
+        a.superficie, 
+        a.peso, 
+        a.precio_venta, 
+        a.obs 
+      FROM articulos a
+      WHERE a.codigo = ?
+    `;
+
+    const [rows] = await db.query(sql, [codigo]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado.' });
+    }
+
+    // Desempaquetado seguro del objeto
+    const articulo = Array.isArray(rows) ? rows : rows;
+
+    res.json({ success: true, dato: articulo });
+  } catch (error) {
+    console.error('❌ Error al obtener datos del artículo:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al consultar el artículo en la BBDD.' });
   }
 });
 
 // 3. POST /api/articulos - Crear nuevo artículo
 router.post('/', async (req, res) => {
   try {
-    const {
-      codigo, codigo_prefijo, codigo_sufijo, descripcion,
-      rubro, precio_venta, llevar_stock, stock_critico,
-      ancho, alto, tiempo_maquina, obs
+    // 🟢 Extraemos explícitamente codigo_prefijo y codigo_sufijo de req.body
+    const { 
+      codigo, 
+      codigo_prefijo, 
+      codigo_sufijo, 
+      descripcion, 
+      rubro, 
+      alicuota, 
+      precio_venta, 
+      llevar_stock, 
+      stock_critico, 
+      ancho, 
+      alto, 
+      peso, 
+      tiempo_maquina, 
+      obs 
     } = req.body;
 
     if (!codigo || !descripcion) {
@@ -68,27 +151,28 @@ router.post('/', async (req, res) => {
 
     const anchoNum = parseFloat(ancho || 0);
     const altoNum = parseFloat(alto || 0);
-    const superficie = (anchoNum * altoNum).toFixed(4);
+    const superficie = (anchoNum * altoNum / 10000).toFixed(4);
     const rubroVal = parseInt(rubro) || 0;
 
     const sql = `
       INSERT INTO articulos 
-      (codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, alicuota, precio_venta, llevar_stock, stock_critico, ancho, alto, superficie, tiempo_maquina, obs)
-      VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+      (codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, alicuota, precio_venta, llevar_stock, stock_critico, ancho, alto, superficie, peso, tiempo_maquina, obs)
+      VALUES (?, ?, ?, ?, ?, 7, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await db.query(sql, [
-      codigo.trim(),
+      codigo.trim().toUpperCase(),
       (codigo_prefijo || '').trim().toUpperCase(),
       (codigo_sufijo || '').trim().toUpperCase(),
       descripcion.trim().toUpperCase(),
       rubroVal,
-      parseFloat(precio_venta || 0),
+      Math.round(parseFloat(precio_venta || 0)),
       llevar_stock || 'S',
       parseInt(stock_critico || 0),
       anchoNum,
       altoNum,
       superficie,
+      parseFloat(peso || 0),
       parseFloat(tiempo_maquina || 0),
       (obs || '').trim().toUpperCase()
     ]);
@@ -96,15 +180,13 @@ router.post('/', async (req, res) => {
     res.json({ success: true, mensaje: 'Artículo creado exitosamente.' });
   } catch (error) {
     console.error('❌ Error al guardar artículo en BBDD:', error);
-
     if (error.code === 'ER_DUP_ENTRY') {
       return res.status(400).json({ success: false, mensaje: 'El código de artículo ya existe.' });
     }
     if (error.code === 'ER_NO_REFERENCED_ROW_2') {
       return res.status(400).json({ success: false, mensaje: 'El rubro seleccionado no existe en la base de datos.' });
     }
-
-    res.status(500).json({ success: false, mensaje: 'Error al guardar el artículo en la base de datos.' });
+    res.status(500).json({ success: false, mensaje: 'Error al guardar el artículo en la base de datos: ' + error.message });
   }
 });
 
@@ -112,48 +194,42 @@ router.post('/', async (req, res) => {
 router.put('/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
-    const {
-      descripcion, rubro, precio_venta, llevar_stock, stock_critico,
-      ancho, alto, tiempo_maquina, obs
-    } = req.body;
-
-    const anchoNum = parseFloat(ancho || 0);
-    const altoNum = parseFloat(alto || 0);
-    const superficie = (anchoNum * altoNum).toFixed(4);
+    const { rubro, descripcion, ancho, alto, superficie, peso, precio_venta, obs } = req.body;
 
     const sql = `
-      UPDATE articulos SET 
-        descripcion = ?, 
-        rubro = ?, 
-        precio_venta = ?, 
-        llevar_stock = ?, 
-        stock_critico = ?, 
-        ancho = ?, 
-        alto = ?, 
-        superficie = ?, 
-        tiempo_maquina = ?, 
-        obs = ?
+      UPDATE articulos 
+      SET rubro = ?, 
+          descripcion = ?, 
+          ancho = ?, 
+          alto = ?, 
+          superficie = ?, 
+          peso = ?, 
+          precio_venta = ?, 
+          obs = ?
       WHERE codigo = ?
     `;
 
-    await db.query(sql, [
-      (descripcion || '').trim().toUpperCase(),
+    const params = [
       parseInt(rubro) || 0,
-      parseFloat(precio_venta || 0),
-      llevar_stock || 'S',
-      parseInt(stock_critico || 0),
-      anchoNum,
-      altoNum,
-      superficie,
-      parseFloat(tiempo_maquina || 0),
+      (descripcion || '').trim().toUpperCase(),
+      parseFloat(ancho) || 0,
+      parseFloat(alto) || 0,
+      parseFloat(superficie) || 0,
+      parseFloat(peso) || 0,
+      Math.round(parseFloat(precio_venta || 0)),
       (obs || '').trim().toUpperCase(),
       codigo
-    ]);
+    ];
+
+    const [result] = await db.query(sql, params);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado.' });
+    }
 
     res.json({ success: true, mensaje: 'Artículo actualizado correctamente.' });
   } catch (error) {
     console.error('❌ Error al actualizar artículo:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al actualizar el artículo.' });
+    res.status(500).json({ success: false, mensaje: `Error en la base de datos: ${error.message}` });
   }
 });
 

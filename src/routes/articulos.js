@@ -127,7 +127,7 @@ router.get('/:codigo', async (req, res) => {
 // 3. POST /api/articulos - Crear nuevo artículo
 router.post('/', async (req, res) => {
   try {
-    // 🟢 Extraemos explícitamente codigo_prefijo y codigo_sufijo de req.body
+    // Extraemos explícitamente codigo_prefijo y codigo_sufijo de req.body
     const { 
       codigo, 
       codigo_prefijo, 

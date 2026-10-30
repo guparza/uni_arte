@@ -36,7 +36,7 @@ function setFieldValue(ids, valor) {
   return false;
 }
 
-// 🟢 1. Definición global de cotizarPrecioArticuloPedido
+// Definición global de cotizarPrecioArticuloPedido
 async function cotizarPrecioArticuloPedido(codigoArticulo) {
   const inputPrecio = document.getElementById('item_precio') || getModalEl('item_precio');
   if (!codigoArticulo) return;
@@ -73,23 +73,244 @@ async function cotizarItemPedido() {
   }
 }
 
-// 🟢 2. Detección segura de Enter en la casilla de Cantidad
+// 1. Resolver cliente por código exacto o nombre al presionar Enter
+async function procesarSeleccionClienteDirecto(textoIngresado) {
+  const texto = textoIngresado.trim();
+  if (!texto) return false;
+
+  // Si ya coincide con el formato completo "CÓDIGO - NOMBRE"
+  let clienteId = clientesMap[texto];
+  let textoFinal = texto;
+
+  if (!clienteId) {
+    try {
+      const res = await fetch('/api/clientes');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.datos)) {
+        const clientes = data.datos;
+
+        // A. Buscar por Código Exacto (numérico o texto)
+        let coincidencia = clientes.find(c => String(c.codigo).toUpperCase() === texto.toUpperCase());
+
+        // B. Si no encontró por código, buscar por Nombre Exacto (case-insensitive)
+        if (!coincidencia) {
+          coincidencia = clientes.find(c => c.nombre.trim().toUpperCase() === texto.toUpperCase());
+        }
+
+        // C. Si hay una única coincidencia parcial por Nombre
+        if (!coincidencia) {
+          const parciales = clientes.filter(c => c.nombre.toLowerCase().includes(texto.toLowerCase()));
+          if (parciales.length === 1) {
+            coincidencia = parciales[0];
+          }
+        }
+
+        if (coincidencia) {
+          clienteId = coincidencia.codigo;
+          textoFinal = `${coincidencia.codigo} - ${coincidencia.nombre}`;
+          clientesMap[textoFinal] = clienteId;
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error al buscar cliente directo:', err);
+    }
+  }
+
+  if (clienteId) {
+    setFieldValue(['pedido_cliente', 'cliente'], clienteId);
+    setFieldValue(['input_pedido_cliente', 'cliente_texto'], textoFinal);
+    await actualizarListaPreciosClienteActivo(clienteId);
+    return true;
+  }
+
+  return false;
+}
+
+// 2. Resolver artículo por código exacto o texto tipeado
+async function procesarSeleccionArticuloDirecto(textoIngresado) {
+  const texto = textoIngresado.trim();
+  if (!texto) return false;
+
+  let art = catalogoArticulosMap[texto];
+
+  // Si no está en el mapa local, buscar el código exacto en el backend
+  if (!art) {
+    try {
+      const res = await fetch(`/api/articulos/${encodeURIComponent(texto)}`);
+      const data = await res.json();
+      if (data.success && data.dato) {
+        art = Array.isArray(data.dato) ? data.dato[0] : data.dato;
+      } else {
+        const resB = await fetch(`/api/articulos?buscar=${encodeURIComponent(texto)}`);
+        const dataB = await resB.json();
+        if (dataB.success && Array.isArray(dataB.datos)) {
+          art = dataB.datos.find(a => a.codigo.toUpperCase() === texto.toUpperCase()) || dataB.datos[0];
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ No se pudo resolver el código de artículo:', err);
+    }
+  }
+
+  if (art) {
+    const textoCompleto = `${art.codigo} - ${art.descripcion}`;
+    catalogoArticulosMap[textoCompleto] = art;
+    catalogoArticulosMap[art.codigo] = art;
+
+    setFieldValue('input_item_articulo', textoCompleto);
+    setFieldValue('item_articulo', art.codigo);
+
+    // Cotización automática según la lista del cliente
+    await cotizarPrecioArticuloPedido(art.codigo);
+    return true;
+  }
+
+  return false;
+}
+
+// 3. Resolver concepto de venta por código exacto o nombre al presionar Enter
+async function procesarSeleccionConceptoDirecto(textoIngresado) {
+  const selectConc = getModalEl('select_item_concepto');
+  if (!selectConc) return false;
+
+  const texto = (textoIngresado || selectConc.value || '').trim().toUpperCase();
+  if (!texto) return false;
+
+  const options = Array.from(selectConc.options);
+
+  // A. Coincidencia exacta por código (value)
+  let optionEncontrada = options.find(opt => opt.value.toUpperCase() === texto);
+
+  // B. Coincidencia si el texto de la opción empieza por "CÓDIGO -" o "CÓDIGO"
+  if (!optionEncontrada) {
+    optionEncontrada = options.find(opt => {
+      const optText = opt.text.toUpperCase();
+      const partes = optText.split(' - ');
+      return partes[0].trim() === texto;
+    });
+  }
+
+  // C. Coincidencia exacta por descripción o por contenido
+  if (!optionEncontrada) {
+    optionEncontrada = options.find(opt => opt.text.toUpperCase().includes(texto));
+  }
+
+  if (optionEncontrada && optionEncontrada.value) {
+    selectConc.value = optionEncontrada.value;
+    return true;
+  }
+
+  return false;
+}
+
+// Carga Rápida con Enter (Cliente, Artículo, Concepto, Precio, Cantidad y Observaciones)
+// 🟢 Carga Rápida con Enter (Cliente -> Selector -> Artículo/Concepto -> Precio -> Cantidad -> Observaciones)
 function habilitarNavegacionEnterModal() {
   const modal = document.getElementById('modalPedido');
   if (!modal) return;
 
-  modal.addEventListener('keydown', (e) => {
+  modal.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter') {
-      if (e.target.id === 'pedido_obs' || e.target.name === 'obs') {
-        if (e.shiftKey) return;
+
+      // A. En Observaciones (TEXTAREA) se permite Enter normal para saltos de línea
+      if (e.target.tagName === 'TEXTAREA' || e.target.id === 'pedido_obs' || e.target.name === 'obs') {
+        return;
       }
 
       e.preventDefault();
 
+      const inputCliente = getModalEl('input_pedido_cliente');
+      const tipoSelector = getModalEl('item_tipo_selector');
       const inputArt = getModalEl('input_item_articulo');
+      const selectConc = getModalEl('select_item_concepto');
+      const inputPrecio = getModalEl('item_precio');
+      const inputCant = document.getElementById('item_cantidad') || document.getElementById('cantidad') || getModalEl('item_cantidad');
       const inputObs = getModalEl('pedido_obs') || getModalEl('obs');
 
-      // A. Detección flexible de la casilla de Cantidad
+      const tipoActivo = getFieldValue('item_tipo_selector');
+
+      // B. En Buscador de Cliente -> Resolver y saltar al tipo de ítem (Artículo o Concepto)
+      if (e.target === inputCliente) {
+        const texto = inputCliente.value.trim();
+        if (texto) {
+          const resuelto = await procesarSeleccionClienteDirecto(texto);
+          if (resuelto) {
+            const destino = (tipoActivo === 'concepto' && selectConc) ? selectConc : inputArt;
+            if (destino) {
+              destino.focus();
+              if (typeof destino.select === 'function') destino.select();
+            }
+          } else {
+            alert(`El cliente "${texto}" no fue encontrado.`);
+          }
+        }
+        return;
+      }
+
+      // C. En Selector de Tipo de Ítem (Artículo / Concepto) -> Saltar al buscador correspondiente
+      if (e.target === tipoSelector) {
+        const destino = (tipoActivo === 'concepto' && selectConc) ? selectConc : inputArt;
+        if (destino) {
+          destino.focus();
+          if (typeof destino.select === 'function') destino.select();
+        }
+        return;
+      }
+
+      // D. En Buscador de Artículo (Modo Artículo) -> Resolver y saltar a Cantidad
+      if (e.target === inputArt) {
+        const texto = inputArt.value.trim();
+
+        // Buscador vacío -> Saltar a Observaciones
+        if (!texto) {
+          if (inputObs) {
+            inputObs.focus();
+            if (typeof inputObs.select === 'function') inputObs.select();
+          }
+          return;
+        }
+
+        const resuelto = await procesarSeleccionArticuloDirecto(texto);
+        if (resuelto && inputCant) {
+          inputCant.focus();
+          if (typeof inputCant.select === 'function') inputCant.select();
+        } else if (!resuelto) {
+          alert(`El código de artículo "${texto}" no fue encontrado.`);
+        }
+        return;
+      }
+
+      // E. En Selector/Buscador de Concepto (Modo Concepto) -> Resolver y saltar a Precio Unitario
+      if (e.target === selectConc) {
+        const texto = selectConc.value;
+
+        // Concepto no seleccionado / vacío -> Saltar a Observaciones
+        if (!texto) {
+          if (inputObs) {
+            inputObs.focus();
+            if (typeof inputObs.select === 'function') inputObs.select();
+          }
+          return;
+        }
+
+        const resuelto = await procesarSeleccionConceptoDirecto(texto);
+        if (resuelto && inputPrecio) {
+          inputPrecio.focus();
+          if (typeof inputPrecio.select === 'function') inputPrecio.select();
+        }
+        return;
+      }
+
+      // F. En Precio Unitario -> Saltar a Cantidad
+      if (e.target === inputPrecio) {
+        if (inputCant) {
+          inputCant.focus();
+          if (typeof inputCant.select === 'function') inputCant.select();
+        }
+        return;
+      }
+
+      // G. En Cantidad -> Agregar Ítem a la grilla y reenfocar automáticamente
       const esInputCantidad = (e.target.id === 'item_cantidad' || 
                                e.target.id === 'cantidad' || 
                                e.target.name === 'item_cantidad' || 
@@ -100,16 +321,7 @@ function habilitarNavegacionEnterModal() {
         return;
       }
 
-      // B. Si el Buscador de Artículo está VACÍO -> Salta a Observaciones
-      if (e.target === inputArt && !inputArt.value.trim()) {
-        if (inputObs) {
-          inputObs.focus();
-          if (typeof inputObs.select === 'function') inputObs.select();
-        }
-        return;
-      }
-
-      // C. Navegación secuencial estándar
+      // H. Navegación por defecto para otros elementos del modal
       const controles = Array.from(
         modal.querySelectorAll('input:not([readonly]):not([type="hidden"]), select, textarea, button.btn-primary')
       ).filter(el => el.offsetParent !== null);
@@ -126,7 +338,7 @@ function habilitarNavegacionEnterModal() {
   });
 }
 
-// 🟢 2. Obtener lista de precios del cliente seleccionado
+// 2. Obtener lista de precios del cliente seleccionado
 async function actualizarListaPreciosClienteActivo(codigoCliente) {
   clienteListaPreciosActiva = null;
   if (!codigoCliente) return;
@@ -149,29 +361,33 @@ function alternarTipoItemPedido() {
   const tipo = getFieldValue('item_tipo_selector');
   const divArt = document.getElementById('div_articulo_input');
   const divConc = document.getElementById('div_concepto_input');
-  const inputPrecio = getModalEl('item_precio');
+  const inputArt = getModalEl('input_item_articulo');
+  const selectConc = getModalEl('select_item_concepto');
 
   if (tipo === 'concepto') {
     if (divArt) divArt.classList.add('d-none');
     if (divConc) divConc.classList.remove('d-none');
-    if (inputPrecio) {
-      inputPrecio.value = '0.00';
-      inputPrecio.focus();
-      if (typeof inputPrecio.select === 'function') inputPrecio.select();
-    }
+    setTimeout(() => {
+      if (selectConc) selectConc.focus();
+    }, 50);
   } else {
     if (divConc) divConc.classList.add('d-none');
     if (divArt) divArt.classList.remove('d-none');
-    if (inputPrecio) inputPrecio.value = '0.00';
+    setTimeout(() => {
+      if (inputArt) {
+        inputArt.focus();
+        if (typeof inputArt.select === 'function') inputArt.select();
+      }
+    }, 50);
   }
 }
 
-// 🟢 3. Lectura directa de la cantidad ingresada y agregar ítem
+// 🟢 Lectura directa de cantidad, agregado de ítem y reenfoque inteligente
 function agregarItemADetalle() {
   const tipo = getFieldValue('item_tipo_selector');
   const precio = parseFloat(getFieldValue('item_precio')) || 0;
 
-  // Captura directa de la casilla de cantidad (soporta id "item_cantidad" o "cantidad")
+  // Captura directa de la casilla de cantidad
   const elCant = document.getElementById('item_cantidad') || 
                  document.getElementById('cantidad') || 
                  getModalEl('item_cantidad');
@@ -212,7 +428,6 @@ function agregarItemADetalle() {
       });
     }
 
-    // Limpiar inputs de carga
     setFieldValue('input_item_articulo', '');
     setFieldValue('item_articulo', '');
   } else {
@@ -223,11 +438,6 @@ function agregarItemADetalle() {
 
     if (!codigoConcepto) {
       alert('Seleccione un concepto de venta de la lista.');
-      return;
-    }
-
-    if (precio <= 0) {
-      alert('Ingrese un precio unitario válido para el concepto.');
       return;
     }
 
@@ -254,24 +464,32 @@ function agregarItemADetalle() {
     if (selectConcepto) selectConcepto.value = '';
   }
 
+  // BLOQUE FINAL: Resetear valores por defecto, renderizar y reenfocar
   setFieldValue('item_precio', '0');
   setFieldValue('item_cantidad', '1');
 
   renderizarDetallePedido();
 
-  // Reenfocar automáticamente en el buscador para el siguiente artículo
+  // Reenfocar automáticamente según el tipo de ítem seleccionado
   setTimeout(() => {
-    const inputArt = getModalEl('input_item_articulo');
-    if (inputArt && tipo === 'articulo') {
-      inputArt.focus();
-      if (typeof inputArt.select === 'function') inputArt.select();
+    if (tipo === 'articulo') {
+      const inputArt = getModalEl('input_item_articulo');
+      if (inputArt) {
+        inputArt.focus();
+        if (typeof inputArt.select === 'function') inputArt.select();
+      }
+    } else {
+      const selectConc = getModalEl('select_item_concepto');
+      if (selectConc) {
+        selectConc.focus();
+      }
     }
   }, 50);
 }
 
 let timerBusquedaArticuloDinamico = null;
 
-// 🟢 Búsqueda dinámica de artículos para el autocompletado de pedidos
+// Búsqueda dinámica de artículos para el autocompletado de pedidos
 async function buscarArticulosDinamicoPedido(query) {
   const dlArticulos = document.getElementById('dl_articulos');
   if (!dlArticulos) return;
@@ -387,6 +605,7 @@ async function cargarPedidos(buscar = '') {
             <td class="text-end align-middle">
               <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" title="Editar" onclick="prepararEdicionPedido(${p.control})">✏️</button>
               <button class="btn btn-sm btn-outline-danger px-2 py-0" title="Eliminar" onclick="eliminarPedido(${p.control})">🗑️</button>
+              <button class="btn btn-sm btn-outline-secondary px-2 py-0 ms-1" title="Imprimir PDF" onclick="imprimirPedidoPDF(${p.control})">🖨️</button>
             </td>
           </tr>`;
       });
@@ -621,7 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 🟢 Listener para detectar cambio en el cliente seleccionado
+  // Listener para detectar cambio en el cliente seleccionado
   const inputCliente = getModalEl('input_pedido_cliente');
   if (inputCliente) {
     inputCliente.addEventListener('change', async () => {
@@ -636,7 +855,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 🟢 Búsqueda dinámica y cotización automática al escribir o seleccionar un artículo
+  // Búsqueda dinámica y cotización automática al escribir o seleccionar un artículo
   const inputItemArt = getModalEl('input_item_articulo');
   if (inputItemArt) {
 
@@ -686,6 +905,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+// Función para abrir la vista de impresión en una nueva pestaña
+function imprimirPedidoPDF(control) {
+  window.open(`/api/pedidos/${control}/pdf`, '_blank');
+}
+
 // Exposiciones globales al final del archivo
 window.abrirModalCrearPedido = abrirModalCrearPedido;
 window.prepararEdicionPedido = prepararEdicionPedido;
@@ -698,4 +922,6 @@ window.renderizarDetallePedido = renderizarDetallePedido;
 window.cargarPedidos = cargarPedidos;
 window.cotizarItemPedido = cotizarItemPedido;
 window.cotizarPrecioArticuloPedido = cotizarPrecioArticuloPedido;
+window.procesarSeleccionClienteDirecto = procesarSeleccionClienteDirecto;
 window.habilitarNavegacionEnterModal = habilitarNavegacionEnterModal;
+window.imprimirPedidoPDF = imprimirPedidoPDF;

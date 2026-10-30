@@ -295,4 +295,152 @@ router.delete('/:control', async (req, res) => {
   }
 });
 
+// GET /api/pedidos/:control/pdf - Generar comprobante imprimible de pedido
+router.get('/:control/pdf', async (req, res) => {
+  try {
+    const { control } = req.params;
+
+    // 1. Consultar encabezado del pedido y datos del cliente
+    const [rows] = await db.query(`
+      SELECT p.*, c.nombre AS cliente_nombre 
+      FROM pedidos p 
+      LEFT JOIN clientes c ON c.codigo = p.cliente 
+      WHERE p.control = ?
+    `, [control]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).send('Pedido no encontrado');
+    }
+
+    // 🟢 CORRECCIÓN CLAVE: Extraer el objeto del primer resultado con [0]
+    const pedido = rows[0]; 
+
+    // 2. Consultar detalle de artículos/conceptos desde 'pedidos_deta'
+    const [detalles] = await db.query(`
+      SELECT pd.*, a.descripcion AS articulo_desc, cv.descripcion AS concepto_desc
+      FROM pedidos_deta pd
+      LEFT JOIN articulos a ON a.codigo = pd.articulo
+      LEFT JOIN conceptos_ventas cv ON cv.codigo = pd.concepto
+      WHERE pd.control = ?
+    `, [control]);
+
+    // 3. Formato seguro de Fecha
+    let fechaFmt = '-';
+    if (pedido.fecha) {
+      const fechaObj = new Date(pedido.fecha);
+      if (!isNaN(fechaObj.getTime())) {
+        fechaFmt = fechaObj.toLocaleDateString('es-AR');
+      } else {
+        const fechaStr = String(pedido.fecha).split('T')[0];
+        const partes = fechaStr.split('-');
+        if (partes.length === 3) {
+          fechaFmt = `${partes[2]}/${partes[1]}/${partes[0]}`;
+        }
+      }
+    }
+
+    const totalFmt = Number(pedido.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // 4. Armar filas de la tabla de ítems
+    let filasHtml = '';
+    detalles.forEach(d => {
+      const codigo = d.articulo || (d.concepto ? `CONCEPTO #${d.concepto}` : '-');
+      const desc = d.articulo ? (d.articulo_desc || d.articulo) : (d.concepto_desc || `Concepto #${d.concepto}`);
+      const precioFmt = Number(d.precio_unit || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const subtotalFmt = Number(d.total || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      filasHtml += `
+        <tr>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${codigo}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${desc}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center; font-weight: bold;">${d.cantidad}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">$ ${precioFmt}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right; font-weight: bold;">$ ${subtotalFmt}</td>
+        </tr>`;
+    });
+
+    // 5. Plantilla HTML imprimible
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Pedido #${pedido.control} - UniArte</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 30px; color: #333; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; margin-bottom: 20px; }
+          .title { font-size: 24px; font-weight: bold; color: #0d6efd; }
+          .info-box { background: #f8f9fa; padding: 12px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th { background: #0d6efd; color: white; padding: 10px; text-align: left; font-size: 14px; }
+          .total-box { text-align: right; font-size: 18px; font-weight: bold; margin-top: 15px; color: #198754; }
+          .obs-box { margin-top: 25px; padding: 10px; border: 1px dashed #ccc; background: #fffbe6; border-radius: 5px; }
+          @media print {
+            .btn-imprimir { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+
+        <div style="text-align: right; margin-bottom: 10px;">
+          <button class="btn-imprimir" onclick="window.print()" style="padding: 8px 16px; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🖨️ Imprimir / Guardar PDF</button>
+        </div>
+
+        <div class="header">
+          <div>
+            <div class="title">🎨 UniArte</div>
+            <small>Comprobante de Orden de Pedido</small>
+          </div>
+          <div style="text-align: right;">
+            <h2 style="margin: 0; color: #333;">PEDIDO #${pedido.control}</h2>
+            <small>Fecha: ${fechaFmt}</small>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <div>
+            <strong>Cliente:</strong> ${pedido.cliente_nombre || 'Cliente #' + pedido.cliente}<br>
+            <strong>Código Cliente:</strong> #${pedido.cliente}
+          </div>
+          <div>
+            <strong>Estado:</strong> ${pedido.estado === '2' ? 'FINALIZADO' : (pedido.estado === '4' ? 'CANCELADO' : 'PENDIENTE')}
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>CÓDIGO</th>
+              <th>DESCRIPCIÓN</th>
+              <th style="text-align: center;">CANT.</th>
+              <th style="text-align: right;">PRECIO UNIT.</th>
+              <th style="text-align: right;">SUBTOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filasHtml}
+          </tbody>
+        </table>
+
+        <div class="total-box">
+          TOTAL PEDIDO: $ ${totalFmt}
+        </div>
+
+        ${pedido.obs ? `
+          <div class="obs-box">
+            <strong>Observaciones de Trabajo:</strong><br>
+            ${pedido.obs}
+          </div>
+        ` : ''}
+      </body>
+      </html>
+    `;
+
+    res.send(html);
+  } catch (error) {
+    console.error('❌ Error al generar PDF de pedido:', error);
+    res.status(500).send('Error interno al generar el comprobante.');
+  }
+});
+
 module.exports = router;

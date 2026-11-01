@@ -61,23 +61,28 @@ async function cargarRubrosTabla() {
   }
 }
 
-// 🎨 Renderizar filas
+// Renderizar filas en la tabla de Rubros
 function renderizarTablaRubros(lista) {
-  const tbody = document.getElementById('tbodyRubros') || document.getElementById('tablaRubros');
+  const tbody = document.getElementById('tablaRubros') || document.getElementById('tbodyRubros');
   if (!tbody) return;
 
-  if (lista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No se encontraron rubros.</td></tr>';
+  // Filtrar el rubro 0 antes de renderizar
+  const listaSinRubroCero = lista.filter(r => parseInt(r.codigo) !== 0);
+
+  if (listaSinRubroCero.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay rubros registrados.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = lista.map(r => `
+  tbody.innerHTML = listaSinRubroCero.map(r => `
     <tr>
-      <td class="fw-bold align-middle">${r.codigo}</td>
-      <td class="align-middle fw-semibold">${r.descripcion || '-'}</td>
-      <td class="text-end align-middle">
-        <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" onclick="prepararEdicionRubro('${r.codigo}')" title="Editar">✏️</button>
-        <button class="btn btn-sm btn-outline-danger px-2 py-0" onclick="eliminarRubro('${r.codigo}')" title="Eliminar">🗑️</button>
+      <td class="fw-bold text-secondary">${r.codigo}</td>
+      <td>${r.descripcion}</td>
+      <td class="text-center text-nowrap">
+        <div class="d-flex justify-content-center gap-1">
+          <button class="btn btn-sm btn-outline-primary px-2 py-1" onclick="prepararEdicionRubro(${r.codigo})" title="Editar">✏️</button>
+          <button class="btn btn-sm btn-outline-danger px-2 py-1" onclick="eliminarRubro(${r.codigo})" title="Eliminar">🗑️</button>
+        </div>
       </td>
     </tr>
   `).join('');

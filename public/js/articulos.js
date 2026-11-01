@@ -2,6 +2,7 @@
 
 let modoEdicionArticulo = false;
 let timerBusquedaArticulo = null;
+let codigoOriginalArticulo = '';
 
 // ==========================================
 // 🛠️ HELPERS DE BÚSQUEDA Y ASIGNACIÓN
@@ -102,6 +103,33 @@ function calcularSuperficie() {
   setFieldValue(['articulo_superficie', 'superficie'], sup.toFixed(4));
 }
 
+// 🟢 Función para armar y mostrar dinámicamente el Código Final en tiempo real
+function actualizarCodigoFinalModal() {
+  const prefijo = getFieldValue(['articulo_prefijo', 'codigo_prefijo', 'prefijo']);
+  const sufijo = getFieldValue(['articulo_sufijo', 'codigo_sufijo', 'sufijo']);
+
+  let codigoCalculado = '';
+  if (prefijo || sufijo) {
+    // Une prefijo y sufijo sanitizando guiones dobles
+    codigoCalculado = `${prefijo}-${sufijo}`.replace(/-+/g, '-').replace(/^-|-$/g, '').toUpperCase();
+  }
+
+  setFieldValue(['articulo_codigo', 'codigo'], codigoCalculado);
+}
+
+// 🟢 En la inicialización del DOM (dentro de document.addEventListener('DOMContentLoaded', ...))
+document.addEventListener('DOMContentLoaded', () => {
+  cargarArticulos();
+  habilitarNavegacionEnterModal();
+
+  // Escuchar escritura en Prefijo y Sufijo para armar el Código Final en vivo
+  const inputPrefijo = getModalEl('articulo_prefijo') || getModalEl('prefijo');
+  const inputSufijo = getModalEl('articulo_sufijo') || getModalEl('sufijo');
+
+  if (inputPrefijo) inputPrefijo.addEventListener('input', actualizarCodigoFinalModal);
+  if (inputSufijo) inputSufijo.addEventListener('input', actualizarCodigoFinalModal);
+});
+
 // Vista previa de la imagen al seleccionar un archivo nuevo
 function mostrarVistaPreviaFoto(input) {
   const imgPreview = document.getElementById('imgVistaPrevia') || getModalEl('articulo_img_preview');
@@ -168,6 +196,7 @@ function habilitarNavegacionEnterModalArticulo() {
 // 📊 GRILLA PRINCIPAL DE ARTÍCULOS
 // ==========================================
 
+// 4. Cargar Tabla de Artículos (Sin columna Peso)
 async function cargarArticulos(buscar = '') {
   const tbody = document.getElementById('tbodyArticulos');
   if (!tbody) return;
@@ -178,7 +207,8 @@ async function cargarArticulos(buscar = '') {
 
     if (data.success && Array.isArray(data.datos)) {
       if (data.datos.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">No se encontraron artículos registrados.</td></tr>';
+        // 🟢 Colspan ajustado a 7 columnas
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No se encontraron artículos registrados.</td></tr>';
         return;
       }
 
@@ -192,7 +222,6 @@ async function cargarArticulos(buscar = '') {
         const rub = a.rubro_desc || '-';
         const medidas = (a.ancho || a.alto) ? `${a.ancho} x ${a.alto}` : '-';
         const supFmt = Number(a.superficie || 0).toFixed(4);
-        const pesoFmt = Number(a.peso || 0).toFixed(3);
         
         const valorPrecio = a.precio_venta !== undefined ? a.precio_venta : (a.precio !== undefined ? a.precio : 0);
         const precioFmt = Number(valorPrecio).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -204,7 +233,6 @@ async function cargarArticulos(buscar = '') {
             <td class="align-middle small">${rub}</td>
             <td class="align-middle text-end small">${medidas}</td>
             <td class="align-middle text-end small text-muted">${supFmt} m²</td>
-            <td class="align-middle text-end small fw-semibold text-secondary">${pesoFmt} kg</td>
             <td class="align-middle text-end fw-bold text-success">$ ${precioFmt}</td>
             <td class="text-end align-middle text-nowrap">
               <button class="btn btn-sm btn-outline-primary me-1 px-2 py-0" title="Editar" onclick="prepararEdicionArticulo('${cod}')">✏️</button>
@@ -265,135 +293,138 @@ async function abrirModalCrearArticulo() {
   }
 }
 
-// Cargar Artículo para Edición
+// 6. ✏️ Cargar Artículo para Edición
 async function prepararEdicionArticulo(codigo) {
   try {
     modoEdicionArticulo = true;
+    codigoOriginalArticulo = codigo.trim(); // 🟢 Guardamos el código original intacto
 
-    // 1. Limpieza previa del formulario e imagen
-    const form = document.getElementById('formArticulo') || document.querySelector('#modalArticulo form');
-    if (form) form.reset();
-    if (typeof quitarImagenSeleccionada === 'function') quitarImagenSeleccionada();
-
-    // 2. Cargar opciones del selector de Rubros
     await cargarRubrosAuxiliares();
 
-    // 3. Consultar datos al servidor
-    const res = await fetch(`/api/articulos/${encodeURIComponent(codigo)}`);
-    if (!res.ok) {
-      alert('❌ Error de comunicación con el servidor.');
-      return;
-    }
+    const res = await fetch(`/api/articulos/${encodeURIComponent(codigoOriginalArticulo)}`);
     const data = await res.json();
 
-    let info = data.dato || data.datos || data.data || data;
-    if (Array.isArray(info)) info = info[0];
+    const infoDB = data.datos || data.dato || data.data;
 
-    if (!data.success || !info || typeof info !== 'object') {
-      alert('❌ No se encontraron los datos del artículo.');
-      return;
-    }
+    if (data.success && infoDB) {
+      const a = Array.isArray(infoDB) ? infoDB[0] : infoDB;
 
-    const cod = info.codigo || info.CODIGO || codigo;
-
-    const setCampoSeguro = (ids, valor) => {
-      const lista = Array.isArray(ids) ? ids : [ids];
-      const valLimpio = (valor !== null && valor !== undefined) ? valor : '';
-      for (const id of lista) {
-        const el = document.getElementById(id) || 
-                   document.querySelector(`#modalArticulo #${id}`) ||
-                   document.querySelector(`#modalArticulo [name="${id}"]`);
-        if (el) {
-          el.value = valLimpio;
-          return true;
-        }
+      if (!a || typeof a !== 'object') {
+        alert('❌ No se encontraron los datos del artículo.');
+        return;
       }
-      return false;
-    };
 
-    // 4. Asignación limpia de campos
-    let pref = info.codigo_prefijo || info.CODIGO_PREFIJO || '';
-    let suf = info.codigo_sufijo || info.CODIGO_SUFIJO || '';
+      // Al cargar los datos del artículo en el modal:
+setFieldValue(['articulo_prefijo', 'codigo_prefijo', 'prefijo'], a.codigo_prefijo || '');
+setFieldValue(['articulo_sufijo', 'codigo_sufijo', 'sufijo'], a.codigo_sufijo || '');
+setFieldValue(['articulo_codigo', 'codigo'], a.codigo); 
 
-    if (!pref && !suf) {
-      if (cod.includes('-')) {
-        const partes = cod.split('-');
-        pref = partes[0];
-        suf = partes.slice(1).join('-');
+      const inputCodigo = getModalEl('articulo_codigo') || getModalEl('codigo');
+      if (inputCodigo) inputCodigo.readOnly = true;
+
+      setFieldValue(['articulo_descripcion', 'descripcion'], a.descripcion);
+
+      const selectRubro = getModalEl('articulo_rubro') || getModalEl('rubro');
+      if (selectRubro) selectRubro.value = String(a.rubro !== undefined ? a.rubro : 0);
+
+      setFieldValue(['articulo_ancho', 'ancho'], a.ancho);
+      setFieldValue(['articulo_alto', 'alto'], a.alto);
+      setFieldValue(['articulo_superficie', 'superficie'], a.superficie);
+      setFieldValue(['articulo_precio', 'precio_venta', 'precio'], a.precio_venta || a.precio);
+      setFieldValue(['articulo_obs', 'obs', 'observaciones'], a.obs || '');
+
+      // Vista previa de imagen si existe
+      if (a.tieneFoto && a.fotoUrl) {
+        const imgPreview = document.getElementById('imgVistaPrevia') || getModalEl('articulo_img_preview');
+        const contenedor = document.getElementById('contenedorPreview');
+        if (imgPreview) {
+          imgPreview.src = `${a.fotoUrl}?t=${Date.now()}`;
+          if (contenedor) contenedor.classList.remove('d-none');
+        }
       } else {
-        pref = cod;
-        suf = '';
+        quitarImagenSeleccionada();
       }
-    }
 
-    setCampoSeguro(['codigo_prefijo', 'articulo_codigo_prefijo'], pref);
-    setCampoSeguro(['codigo_sufijo', 'articulo_codigo_sufijo'], suf);
-    setCampoSeguro(['codigo_articulo', 'articulo_codigo', 'codigo'], cod);
+      const alerta = document.getElementById('alertaArticuloModal');
+      if (alerta) alerta.innerHTML = '';
 
-    setCampoSeguro(['articulo_descripcion', 'descripcion_articulo', 'descripcion'], info.descripcion || info.DESCRIPCION || '');
-
-    const selectRubro = document.getElementById('articulo_rubro') || document.getElementById('rubro');
-    if (selectRubro) {
-      selectRubro.value = String(info.rubro !== undefined ? info.rubro : (info.RUBRO !== undefined ? info.RUBRO : 0));
-    }
-
-    setCampoSeguro(['articulo_ancho', 'ancho'], info.ancho !== undefined ? info.ancho : info.ANCHO);
-    setCampoSeguro(['articulo_alto', 'alto'], info.alto !== undefined ? info.alto : info.ALTO);
-    setCampoSeguro(['articulo_superficie', 'superficie'], info.superficie !== undefined ? info.superficie : info.SUPERFICIE);
-    setCampoSeguro(['articulo_peso', 'peso'], info.peso !== undefined ? info.peso : info.PESO);
-    setCampoSeguro(['articulo_precio', 'precio_venta', 'precio'], info.precio_venta !== undefined ? info.precio_venta : (info.PRECIO_VENTA !== undefined ? info.PRECIO_VENTA : info.precio));
-    setCampoSeguro(['articulo_obs', 'obs', 'observaciones'], info.obs !== undefined ? info.obs : (info.OBS !== undefined ? info.OBS : ''));
-
-    // Bloquear campos de clave primaria al editar
-    ['codigo_articulo', 'articulo_codigo', 'codigo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.readOnly = true;
-    });
-    ['codigo_prefijo', 'articulo_codigo_prefijo', 'codigo_sufijo', 'articulo_codigo_sufijo'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.disabled = true;
-    });
-
-    // Cargar vista previa de imagen .png
-    const imgPreview = document.getElementById('imgVistaPrevia') || document.getElementById('articulo_img_preview');
-    const contenedor = document.getElementById('contenedorPreview');
-    if (imgPreview) {
-      imgPreview.src = `/uploads/articulos/${encodeURIComponent(cod)}.png?t=${Date.now()}`;
-      imgPreview.onload = () => { if (contenedor) contenedor.classList.remove('d-none'); };
-      imgPreview.onerror = () => { if (typeof quitarImagenSeleccionada === 'function') quitarImagenSeleccionada(); };
-    }
-
-    // 5. Abrir el modal de Bootstrap y posicionar foco
-    const modalEl = document.getElementById('modalArticulo');
-    if (modalEl && typeof bootstrap !== 'undefined') {
-      const bsModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-      bsModal.show();
-
-      modalEl.addEventListener('shown.bs.modal', function () {
-        const inputPref = document.getElementById('codigo_prefijo');
-        const inputDesc = document.getElementById('articulo_descripcion') || document.getElementById('descripcion');
-        if (modoEdicionArticulo && inputDesc) {
-          inputDesc.focus();
-          inputDesc.select();
-        } else if (inputPref && !inputPref.disabled) {
-          inputPref.focus();
-        }
-      }, { once: true });
-    } else {
-      console.error('❌ No se encontró el modal #modalArticulo en el DOM.');
+      const modalEl = document.getElementById('modalArticulo');
+      if (modalEl && typeof bootstrap !== 'undefined') {
+        const bsModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        bsModal.show();
+      }
     }
   } catch (error) {
     console.error('❌ Error al preparar edición de artículo:', error);
   }
 }
 
-// 💾 GUARDAR ARTÍCULO
+
+
+// 🟢 1. Convertir cualquier formato de imagen a PNG en el navegador
+function convertirImagenAPng(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = () => reject('Error al procesar la imagen.');
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject('Error al leer el archivo.');
+    reader.readAsDataURL(file);
+  });
+}
+
+// 🟢 2. Subir la foto convertida al servidor
+async function subirFotoArticulo(codigo) {
+  const inputFoto = document.getElementById('articulo_foto') || getModalEl('foto');
+  if (!inputFoto || !inputFoto.files || inputFoto.files.length === 0) {
+    return true; // Si no seleccionó foto, continúa normalmente
+  }
+
+  try {
+    const file = inputFoto.files[0];
+    const pngBase64 = await convertirImagenAPng(file);
+
+    const res = await fetch(`/api/articulos/${encodeURIComponent(codigo)}/foto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imagenBase64: pngBase64 })
+    });
+
+    const data = await res.json();
+    return data.success;
+  } catch (err) {
+    console.warn('⚠️ No se pudo subir la foto:', err);
+    return false;
+  }
+}
+
+// 7. 💾 Guardar Artículo (Alta o Edición)
 async function guardarArticulo() {
   const alerta = document.getElementById('alertaArticuloModal');
   if (alerta) alerta.innerHTML = '';
 
-  const codigo = getFieldValue(['codigo_articulo', 'articulo_codigo', 'codigo']);
+  let codigo = getFieldValue(['articulo_codigo', 'codigo']);
+  const prefijo = getFieldValue(['articulo_prefijo', 'codigo_prefijo', 'prefijo']);
+  const sufijo = getFieldValue(['articulo_sufijo', 'codigo_sufijo', 'sufijo']);
   const descripcion = getFieldValue(['articulo_descripcion', 'descripcion']);
+
+  // 🟢 Limpieza de guiones duplicados al armar el código
+  if (!codigo && prefijo) {
+    codigo = `${prefijo}-${sufijo}`.replace(/-+/g, '-').replace(/^-|-$/g, '').toUpperCase();
+    setFieldValue(['articulo_codigo', 'codigo'], codigo);
+  } else if (codigo) {
+    codigo = codigo.replace(/-+/g, '-').toUpperCase();
+  }
 
   if (!codigo || !descripcion) {
     if (alerta) alerta.innerHTML = '<div class="alert alert-warning py-1 small">El código y la descripción son obligatorios.</div>';
@@ -401,20 +432,21 @@ async function guardarArticulo() {
   }
 
   const payload = {
-    codigo: codigo.toUpperCase(),
-    codigo_prefijo: getFieldValue(['codigo_prefijo', 'articulo_codigo_prefijo']).toUpperCase(),
-    codigo_sufijo: getFieldValue(['codigo_sufijo', 'articulo_codigo_sufijo']).toUpperCase(),
+    codigo,
+    codigo_prefijo: prefijo.replace(/-+/g, '-').toUpperCase(),
+    codigo_sufijo: sufijo.replace(/-+/g, '-').toUpperCase(),
     descripcion: descripcion.toUpperCase(),
-    rubro: parseInt(getFieldValue(['articulo_rubro', 'rubro_articulo', 'rubro'])) || 0,
+    rubro: parseInt(getFieldValue(['articulo_rubro', 'rubro'])) || 0,
     ancho: parseFloat(getFieldValue(['articulo_ancho', 'ancho'])) || 0,
     alto: parseFloat(getFieldValue(['articulo_alto', 'alto'])) || 0,
     superficie: parseFloat(getFieldValue(['articulo_superficie', 'superficie'])) || 0,
-    peso: parseFloat(getFieldValue(['articulo_peso', 'peso'])) || 0,
-    precio_venta: Math.round(parseFloat(getFieldValue(['articulo_precio', 'precio_venta', 'precio'])) || 0),
+    precio_venta: parseFloat(getFieldValue(['articulo_precio', 'precio_venta', 'precio'])) || 0,
     obs: getFieldValue(['articulo_obs', 'obs', 'observaciones']).toUpperCase()
   };
 
-  const url = modoEdicionArticulo ? `/api/articulos/${encodeURIComponent(codigo)}` : '/api/articulos';
+  // 🟢 En edición, enviamos la petición al código original exacto de la BBDD
+  const claveEdicion = modoEdicionArticulo ? codigoOriginalArticulo : codigo;
+  const url = modoEdicionArticulo ? `/api/articulos/${encodeURIComponent(claveEdicion)}` : '/api/articulos';
   const metodo = modoEdicionArticulo ? 'PUT' : 'POST';
 
   try {
@@ -427,6 +459,12 @@ async function guardarArticulo() {
     const resultado = await res.json();
 
     if (resultado.success) {
+      try {
+        await subirFotoArticulo(codigo);
+      } catch (eFoto) {
+        console.warn('⚠️ Error al procesar imagen:', eFoto);
+      }
+
       const modalEl = document.getElementById('modalArticulo');
       if (modalEl && typeof bootstrap !== 'undefined') {
         const modal = bootstrap.Modal.getInstance(modalEl);

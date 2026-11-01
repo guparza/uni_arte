@@ -2,6 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db'); // Conexión a la BBDD
+const fs = require('fs');
+const path = require('path');
 
 // GET /api/articulos - Listar catálogo con precio de Lista Minorista
 router.get('/', async (req, res) => {
@@ -86,10 +88,77 @@ router.get('/:codigo/precio', async (req, res) => {
   }
 });
 
-// GET /api/articulos/:codigo - Obtener ficha completa de un artículo por código
+// 🟢 GET /api/articulos/catalogo - Verifica existencia de fotos en servidor
+router.get('/catalogo', async (req, res) => {
+  try {
+    const { rubro, buscar, lista_precios } = req.query;
+    const idLista = parseInt(lista_precios) || 7;
+
+    let sql = `
+      SELECT 
+        a.codigo, 
+        a.codigo_prefijo,
+        a.codigo_sufijo,
+        a.descripcion, 
+        a.rubro, 
+        r.descripcion AS rubro_desc,
+        a.ancho,
+        a.alto,
+        a.superficie,
+        COALESCE(lp.precio, a.precio_venta, 0) AS precio_venta
+      FROM articulos a
+      LEFT JOIN articulos_rubros r ON r.codigo = a.rubro
+      LEFT JOIN listas_precios lp ON lp.articulo = a.codigo AND lp.lista_precios = ?
+      WHERE a.rubro != 0
+    `;
+    let params = [idLista];
+
+    if (rubro && parseInt(rubro) > 0) {
+      sql += ` AND a.rubro = ?`;
+      params.push(parseInt(rubro));
+    }
+
+    if (buscar && buscar.trim() !== '') {
+      sql += ` AND (a.codigo LIKE ? OR a.codigo_prefijo LIKE ? OR a.descripcion LIKE ?)`;
+      const termino = `%${buscar.trim()}%`;
+      params.push(termino, termino, termino);
+    }
+
+    sql += ` ORDER BY COALESCE(NULLIF(a.codigo_prefijo, ''), a.codigo) ASC, a.codigo_sufijo ASC`;
+
+    const [rows] = await db.query(sql, params);
+
+    // 🟢 Validar archivos físicamente en la carpeta uploads
+    const dirUploads = path.join(__dirname, '../../public/uploads/articulos');
+
+    const productosConFoto = rows.map(art => {
+      // Limpiar puntos sobrantes al final del código/prefijo
+      const prefijo = (art.codigo_prefijo || art.codigo).trim().toUpperCase().replace(/\.+$/, '');
+      const codigoInd = art.codigo.trim().toUpperCase().replace(/\.+$/, '');
+
+      let fotoUrl = '/uploads/articulos/sin-foto.png'; // Por defecto
+
+      if (fs.existsSync(path.join(dirUploads, `${prefijo}.png`))) {
+        fotoUrl = `/uploads/articulos/${encodeURIComponent(prefijo)}.png`;
+      } else if (fs.existsSync(path.join(dirUploads, `${codigoInd}.png`))) {
+        fotoUrl = `/uploads/articulos/${encodeURIComponent(codigoInd)}.png`;
+      }
+
+      return { ...art, fotoUrl };
+    });
+
+    res.json({ success: true, datos: productosConFoto });
+  } catch (error) {
+    console.error('❌ Error al consultar catálogo visual:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al consultar el catálogo.' });
+  }
+});
+
+// 🟢 GET /api/articulos/:codigo - Obtener datos de un artículo (valida si tiene foto real)
 router.get('/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
+    const codigoLimpio = codigo.trim().toUpperCase();
 
     const sql = `
       SELECT 
@@ -101,26 +170,69 @@ router.get('/:codigo', async (req, res) => {
         a.ancho, 
         a.alto, 
         a.superficie, 
-        a.peso, 
         a.precio_venta, 
         a.obs 
       FROM articulos a
       WHERE a.codigo = ?
     `;
 
-    const [rows] = await db.query(sql, [codigo]);
+    const [rows] = await db.query(sql, [codigoLimpio]);
 
-    if (!rows || rows.length === 0) {
+    if (rows.length === 0) {
       return res.status(404).json({ success: false, mensaje: 'Artículo no encontrado.' });
     }
 
-    // Desempaquetado seguro del objeto
-    const articulo = Array.isArray(rows) ? rows : rows;
+    const articulo = rows[0];
 
-    res.json({ success: true, dato: articulo });
+    // Comprobar existencia física del archivo .png en disco
+    const dirUploads = path.join(__dirname, '../../public/uploads/articulos');
+    const rutaImagen = path.join(dirUploads, `${codigoLimpio}.png`);
+    const tieneFoto = fs.existsSync(rutaImagen);
+
+    res.json({ 
+      success: true, 
+      datos: {
+        ...articulo,
+        tieneFoto,
+        fotoUrl: tieneFoto ? `/uploads/articulos/${encodeURIComponent(codigoLimpio)}.png` : null
+      }
+    });
   } catch (error) {
     console.error('❌ Error al obtener datos del artículo:', error);
-    res.status(500).json({ success: false, mensaje: 'Error al consultar el artículo en la BBDD.' });
+    res.status(500).json({ success: false, mensaje: 'Error al consultar datos del artículo.' });
+  }
+});
+
+// 🟢 DELETE /api/articulos/:codigo - Borrado seguro de artículo e imagen
+router.delete('/:codigo', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+    const codigoLimpio = codigo.trim().toUpperCase();
+
+    // 1. Validar que no tenga pedidos asociados en la base de datos
+    const [pedidos] = await db.query('SELECT COUNT(*) AS cant FROM pedidos_deta WHERE articulo = ?', [codigoLimpio]);
+    if (pedidos[0].cant > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        mensaje: `No se puede eliminar el artículo #${codigoLimpio} porque está asociado a ${pedidos[0].cant} pedido(s).` 
+      });
+    }
+
+    // 2. Eliminar el registro en MySQL
+    await db.query('DELETE FROM articulos WHERE codigo = ?', [codigoLimpio]);
+
+    // 3. Eliminar el archivo físico de la imagen si existe (evita imágenes huérfanas)
+    const dirUploads = path.join(__dirname, '../../public/uploads/articulos');
+    const rutaImagen = path.join(dirUploads, `${codigoLimpio}.png`);
+
+    if (fs.existsSync(rutaImagen)) {
+      fs.unlinkSync(rutaImagen);
+    }
+
+    res.json({ success: true, mensaje: 'Artículo e imagen eliminados correctamente.' });
+  } catch (error) {
+    console.error('❌ Error al eliminar artículo:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al eliminar el artículo.' });
   }
 });
 
@@ -140,7 +252,6 @@ router.post('/', async (req, res) => {
       stock_critico, 
       ancho, 
       alto, 
-      peso, 
       tiempo_maquina, 
       obs 
     } = req.body;
@@ -156,8 +267,8 @@ router.post('/', async (req, res) => {
 
     const sql = `
       INSERT INTO articulos 
-      (codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, alicuota, precio_venta, llevar_stock, stock_critico, ancho, alto, superficie, peso, tiempo_maquina, obs)
-      VALUES (?, ?, ?, ?, ?, 7, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (codigo, codigo_prefijo, codigo_sufijo, descripcion, rubro, alicuota, precio_venta, llevar_stock, stock_critico, ancho, alto, superficie, tiempo_maquina, obs)
+      VALUES (?, ?, ?, ?, ?, 7, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await db.query(sql, [
@@ -172,7 +283,6 @@ router.post('/', async (req, res) => {
       anchoNum,
       altoNum,
       superficie,
-      parseFloat(peso || 0),
       parseFloat(tiempo_maquina || 0),
       (obs || '').trim().toUpperCase()
     ]);
@@ -190,11 +300,43 @@ router.post('/', async (req, res) => {
   }
 });
 
+// 🟢 POST /api/articulos/:codigo/foto - Guardar o reemplazar imagen en formato PNG
+router.post('/:codigo/foto', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+    const { imagenBase64 } = req.body;
+
+    if (!imagenBase64) {
+      return res.status(400).json({ success: false, mensaje: 'No se envió ninguna imagen.' });
+    }
+
+    const codigoLimpio = codigo.trim().toUpperCase().replace(/\.+$/, '');
+    const dirUploads = path.join(__dirname, '../../public/uploads/articulos');
+
+    if (!fs.existsSync(dirUploads)) {
+      fs.mkdirSync(dirUploads, { recursive: true });
+    }
+
+    // Convertir string Base64 a buffer binario
+    const base64Data = imagenBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    // Guardar archivo estandarizado a PNG
+    const rutaDestino = path.join(dirUploads, `${codigoLimpio}.png`);
+    fs.writeFileSync(rutaDestino, buffer);
+
+    res.json({ success: true, mensaje: 'Imagen guardada correctamente.' });
+  } catch (error) {
+    console.error('❌ Error al guardar la foto:', error);
+    res.status(500).json({ success: false, mensaje: 'Error al procesar la imagen.' });
+  }
+});
+
 // 4. PUT /api/articulos/:codigo - Actualizar artículo existente
 router.put('/:codigo', async (req, res) => {
   try {
     const { codigo } = req.params;
-    const { rubro, descripcion, ancho, alto, superficie, peso, precio_venta, obs } = req.body;
+    const { rubro, descripcion, ancho, alto, superficie, precio_venta, obs } = req.body;
 
     const sql = `
       UPDATE articulos 
@@ -203,7 +345,6 @@ router.put('/:codigo', async (req, res) => {
           ancho = ?, 
           alto = ?, 
           superficie = ?, 
-          peso = ?, 
           precio_venta = ?, 
           obs = ?
       WHERE codigo = ?
@@ -215,7 +356,6 @@ router.put('/:codigo', async (req, res) => {
       parseFloat(ancho) || 0,
       parseFloat(alto) || 0,
       parseFloat(superficie) || 0,
-      parseFloat(peso) || 0,
       Math.round(parseFloat(precio_venta || 0)),
       (obs || '').trim().toUpperCase(),
       codigo

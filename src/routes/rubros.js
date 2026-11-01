@@ -3,10 +3,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
-// GET /api/rubros - Obtener lista de rubros
+// GET /api/rubros - Obtener lista de rubros (Excluye el rubro 0 de BBDD)
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT codigo, descripcion FROM articulos_rubros ORDER BY codigo ASC');
+    const [rows] = await db.query('SELECT codigo, descripcion FROM articulos_rubros WHERE codigo != 0 ORDER BY codigo ASC');
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error al consultar rubros:', error);

@@ -73,33 +73,48 @@ async function cotizarItemPedido() {
   }
 }
 
-// 1. Resolver cliente por código exacto o nombre al presionar Enter
+// 1. Resolver cliente por código exacto o nombre al presionar Enter (Robustecido)
 async function procesarSeleccionClienteDirecto(textoIngresado) {
   const texto = textoIngresado.trim();
   if (!texto) return false;
 
-  // Si ya coincide con el formato completo "CÓDIGO - NOMBRE"
-  let clienteId = clientesMap[texto];
-  let textoFinal = texto;
+  let clienteId = null;
+  let textoFinal = '';
 
+  // 🟢 A. Buscar coincidencia inmediata en memoria local (soporta código limpio o formato completo)
+  const entradaMapa = clientesMap[texto] || clientesMap[texto.toUpperCase()];
+
+  if (entradaMapa) {
+    if (typeof entradaMapa === 'object') {
+      clienteId = entradaMapa.codigo;
+      textoFinal = `${entradaMapa.codigo} - ${entradaMapa.nombre}`;
+    } else {
+      clienteId = entradaMapa;
+      textoFinal = texto;
+    }
+  }
+
+  // 🟢 B. Si no estaba en memoria local, buscar en la base de datos
   if (!clienteId) {
     try {
       const res = await fetch('/api/clientes');
       const data = await res.json();
-      if (data.success && Array.isArray(data.datos)) {
-        const clientes = data.datos;
+      
+      // Soporta data.datos (backend actual), data.dato o arreglos directos
+      const listaClientes = data.datos || data.dato || (Array.isArray(data) ? data : []);
 
-        // A. Buscar por Código Exacto (numérico o texto)
-        let coincidencia = clientes.find(c => String(c.codigo).toUpperCase() === texto.toUpperCase());
+      if (data.success && Array.isArray(listaClientes)) {
+        // 1. Coincidencia por Código Exacto (numérico o alfanumérico)
+        let coincidencia = listaClientes.find(c => String(c.codigo).toUpperCase() === texto.toUpperCase());
 
-        // B. Si no encontró por código, buscar por Nombre Exacto (case-insensitive)
+        // 2. Coincidencia por Nombre Exacto (case-insensitive)
         if (!coincidencia) {
-          coincidencia = clientes.find(c => c.nombre.trim().toUpperCase() === texto.toUpperCase());
+          coincidencia = listaClientes.find(c => (c.nombre || '').trim().toUpperCase() === texto.toUpperCase());
         }
 
-        // C. Si hay una única coincidencia parcial por Nombre
+        // 3. Coincidencia única parcial por Nombre
         if (!coincidencia) {
-          const parciales = clientes.filter(c => c.nombre.toLowerCase().includes(texto.toLowerCase()));
+          const parciales = listaClientes.filter(c => (c.nombre || '').toLowerCase().includes(texto.toLowerCase()));
           if (parciales.length === 1) {
             coincidencia = parciales[0];
           }
@@ -108,7 +123,11 @@ async function procesarSeleccionClienteDirecto(textoIngresado) {
         if (coincidencia) {
           clienteId = coincidencia.codigo;
           textoFinal = `${coincidencia.codigo} - ${coincidencia.nombre}`;
+
+          // Indexar en memoria local para futuras resoluciones instantáneas
           clientesMap[textoFinal] = clienteId;
+          clientesMap[String(coincidencia.codigo)] = coincidencia;
+          clientesMap[String(coincidencia.codigo).toUpperCase()] = coincidencia;
         }
       }
     } catch (err) {
@@ -116,9 +135,14 @@ async function procesarSeleccionClienteDirecto(textoIngresado) {
     }
   }
 
+  // 🟢 C. Si se resolvió el cliente, poblar los campos del modal y actualizar su lista de precios
   if (clienteId) {
     setFieldValue(['pedido_cliente', 'cliente'], clienteId);
     setFieldValue(['input_pedido_cliente', 'cliente_texto'], textoFinal);
+
+    clientesMap[textoFinal] = clienteId;
+
+    // Actualizar la lista de precios asignada al cliente para las cotizaciones posteriores
     await actualizarListaPreciosClienteActivo(clienteId);
     return true;
   }
@@ -126,20 +150,25 @@ async function procesarSeleccionClienteDirecto(textoIngresado) {
   return false;
 }
 
-// 2. Resolver artículo por código exacto o texto tipeado
+// 2. Resolver artículo por código exacto o texto tipeado (Corregido)
 async function procesarSeleccionArticuloDirecto(textoIngresado) {
   const texto = textoIngresado.trim();
   if (!texto) return false;
 
-  let art = catalogoArticulosMap[texto];
+  // 1°. Buscar en memoria local (soportando minúsculas/mayúsculas)
+  let art = catalogoArticulosMap[texto] || catalogoArticulosMap[texto.toUpperCase()];
 
-  // Si no está en el mapa local, buscar el código exacto en el backend
+  // 2°. Buscar en el servidor por código exacto si no estaba en el mapa local
   if (!art) {
     try {
       const res = await fetch(`/api/articulos/${encodeURIComponent(texto)}`);
       const data = await res.json();
-      if (data.success && data.dato) {
-        art = Array.isArray(data.dato) ? data.dato[0] : data.dato;
+
+      // 🟢 Lee la propiedad 'datos' (backend actual) o 'dato' por compatibilidad
+      const infoDB = data.datos || data.dato;
+
+      if (data.success && infoDB) {
+        art = Array.isArray(infoDB) ? infoDB : infoDB;
       } else {
         const resB = await fetch(`/api/articulos?buscar=${encodeURIComponent(texto)}`);
         const dataB = await resB.json();
@@ -152,15 +181,18 @@ async function procesarSeleccionArticuloDirecto(textoIngresado) {
     }
   }
 
+  // 3°. Asignar valores al modal y cotizar
   if (art) {
     const textoCompleto = `${art.codigo} - ${art.descripcion}`;
+    
     catalogoArticulosMap[textoCompleto] = art;
     catalogoArticulosMap[art.codigo] = art;
+    catalogoArticulosMap[art.codigo.toUpperCase()] = art;
 
     setFieldValue('input_item_articulo', textoCompleto);
     setFieldValue('item_articulo', art.codigo);
 
-    // Cotización automática según la lista del cliente
+    // Cotizar según lista del cliente asignado
     await cotizarPrecioArticuloPedido(art.codigo);
     return true;
   }
@@ -382,8 +414,23 @@ function alternarTipoItemPedido() {
   }
 }
 
-// 🟢 Lectura directa de cantidad, agregado de ítem y reenfoque inteligente
+// 🟢 Muestra alertas Bootstrap internas dentro del modal (evita ventanas nativas de alert/localhost)
+function mostrarAlertaPedido(mensaje, tipo = 'warning') {
+  const alerta = document.getElementById('alertaPedidoModal');
+  if (alerta) {
+    alerta.innerHTML = `
+      <div class="alert alert-${tipo} py-1 px-2 small mb-2 alert-dismissible fade show" role="alert">
+        ${mensaje}
+        <button type="button" class="btn-close py-1 px-2" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+      </div>`;
+  }
+}
+
+// 🟢 Agregado ultra-robusto de ítems al detalle del pedido
 function agregarItemADetalle() {
+  const alerta = document.getElementById('alertaPedidoModal');
+  if (alerta) alerta.innerHTML = '';
+
   const tipo = getFieldValue('item_tipo_selector');
   const precio = parseFloat(getFieldValue('item_precio')) || 0;
 
@@ -396,16 +443,48 @@ function agregarItemADetalle() {
   const cantidad = parseInt(cantidadVal, 10);
 
   if (isNaN(cantidad) || cantidad <= 0) {
-    alert('Ingrese una cantidad válida mayor a cero.');
+    mostrarAlertaPedido('Ingrese una cantidad válida mayor a cero.');
     return;
   }
 
   if (tipo === 'articulo') {
-    const inputTextoArt = getFieldValue('input_item_articulo');
-    const artObj = catalogoArticulosMap[inputTextoArt] || catalogoArticulosMap[getFieldValue('item_articulo')];
+    const inputTextoArt = getFieldValue('input_item_articulo').trim();
+    const codOculto = getFieldValue('item_articulo').trim();
 
-    if (!artObj) {
-      alert('Seleccione un artículo válido de la lista predictiva.');
+    if (!inputTextoArt && !codOculto) {
+      mostrarAlertaPedido('Ingrese un código o descripción de artículo.');
+      return;
+    }
+
+    // 1°. Extraer el código limpio si el texto contiene ' - ' (ej: de "NA822 - SERVILLETERO..." extrae "NA822")
+    let codigoExtraido = codOculto;
+    if (!codigoExtraido && inputTextoArt) {
+      codigoExtraido = inputTextoArt.includes(' - ') 
+        ? inputTextoArt.split(' - ')[0].trim().toUpperCase() 
+        : inputTextoArt.toUpperCase();
+    }
+
+    // 2°. Búsqueda defensiva en memoria probando todas las variantes de clave
+    let artObj = catalogoArticulosMap[inputTextoArt] || 
+                 catalogoArticulosMap[inputTextoArt.toUpperCase()] || 
+                 catalogoArticulosMap[codOculto] || 
+                 catalogoArticulosMap[codOculto.toUpperCase()] ||
+                 catalogoArticulosMap[codigoExtraido];
+
+    // 3°. Fallback inteligente: si no está en el mapa pero tenemos el código, armamos el objeto en vivo
+    if (!artObj && codigoExtraido) {
+      const partes = inputTextoArt.split(' - ');
+      const descExtraida = partes.length > 1 ? partes.slice(1).join(' - ').trim() : codigoExtraido;
+      artObj = {
+        codigo: codigoExtraido,
+        descripcion: descExtraida
+      };
+      // Indexar para futuras referencias
+      catalogoArticulosMap[codigoExtraido] = artObj;
+    }
+
+    if (!artObj || !artObj.codigo) {
+      mostrarAlertaPedido('Seleccione un artículo válido de la lista predictiva.');
       return;
     }
 
@@ -431,46 +510,42 @@ function agregarItemADetalle() {
     setFieldValue('input_item_articulo', '');
     setFieldValue('item_articulo', '');
   } else {
-    // Modo Concepto de Venta
+    // Modo Concepto de Venta: Inserta siempre como renglón independiente
     const selectConcepto = getModalEl('select_item_concepto');
     const codigoConcepto = selectConcepto?.value;
     const descOption = selectConcepto?.options[selectConcepto.selectedIndex]?.text || '';
 
     if (!codigoConcepto) {
-      alert('Seleccione un concepto de venta de la lista.');
+      if (typeof mostrarAlertaPedido === 'function') {
+        mostrarAlertaPedido('Seleccione un concepto de venta de la lista.');
+      } else {
+        alert('Seleccione un concepto de venta de la lista.');
+      }
       return;
     }
 
     const subtotal = precio * cantidad;
     const codNum = parseInt(codigoConcepto);
 
-    const indexExistente = itemsDetallePedido.findIndex(i => i.concepto === codNum);
-    if (indexExistente > -1) {
-      itemsDetallePedido[indexExistente].cantidad += cantidad;
-      itemsDetallePedido[indexExistente].precio_unit = precio;
-      itemsDetallePedido[indexExistente].total = itemsDetallePedido[indexExistente].cantidad * precio;
-    } else {
-      itemsDetallePedido.push({
-        articulo: null,
-        concepto: codNum,
-        descripcion: descOption,
-        precio_unit: precio,
-        dscto: 0,
-        cantidad: cantidad,
-        total: subtotal
-      });
-    }
+    // 🟢 Agrega siempre un nuevo renglón a la grilla sin acumular por código
+    itemsDetallePedido.push({
+      articulo: null,
+      concepto: codNum,
+      descripcion: descOption,
+      precio_unit: precio,
+      dscto: 0,
+      cantidad: cantidad,
+      total: subtotal
+    });
 
     if (selectConcepto) selectConcepto.value = '';
   }
-
-  // BLOQUE FINAL: Resetear valores por defecto, renderizar y reenfocar
+  // Resetear campos, renderizar detalle y reenfocar
   setFieldValue('item_precio', '0');
   setFieldValue('item_cantidad', '1');
 
   renderizarDetallePedido();
 
-  // Reenfocar automáticamente según el tipo de ítem seleccionado
   setTimeout(() => {
     if (tipo === 'articulo') {
       const inputArt = getModalEl('input_item_articulo');
@@ -480,9 +555,7 @@ function agregarItemADetalle() {
       }
     } else {
       const selectConc = getModalEl('select_item_concepto');
-      if (selectConc) {
-        selectConc.focus();
-      }
+      if (selectConc) selectConc.focus();
     }
   }, 50);
 }
@@ -520,47 +593,60 @@ async function buscarArticulosDinamicoPedido(query) {
 // 1. Cargar Auxiliares (Clientes, Artículos y Conceptos de Venta)
 async function cargarAuxiliaresPedidos() {
   try {
-    // Clientes
+    // 🟢 A. Clientes: Carga e indexación directa por código y formato completo
     const resCli = await fetch('/api/clientes');
     const dataCli = await resCli.json();
     const dlClientes = document.getElementById('dl_clientes');
+    const listaClientes = dataCli.datos || dataCli.dato || (Array.isArray(dataCli) ? dataCli : []);
 
-    if (dlClientes && dataCli.success && Array.isArray(dataCli.datos)) {
+    if (dlClientes && dataCli.success && Array.isArray(listaClientes)) {
       let htmlCli = '';
       clientesMap = {};
-      dataCli.datos.forEach(c => {
+      listaClientes.forEach(c => {
         const texto = `${c.codigo} - ${c.nombre}`;
+        
+        // Mapeo por formato completo y por código suelto (numérico/texto)
         clientesMap[texto] = c.codigo;
+        clientesMap[c.codigo] = c;
+        clientesMap[String(c.codigo).toUpperCase()] = c;
+
         htmlCli += `<option value="${texto}"></option>`;
       });
       dlClientes.innerHTML = htmlCli;
     }
 
-    // Artículos
+    // 🟢 B. Artículos: Carga e indexación directa por código suelto y formato completo
     const resArt = await fetch('/api/articulos');
     const dataArt = await resArt.json();
     const dlArticulos = document.getElementById('dl_articulos');
+    const listaArticulos = dataArt.datos || dataArt.dato || (Array.isArray(dataArt) ? dataArt : []);
 
-    if (dlArticulos && dataArt.success && Array.isArray(dataArt.datos)) {
+    if (dlArticulos && dataArt.success && Array.isArray(listaArticulos)) {
       let htmlArt = '';
       catalogoArticulosMap = {};
-      dataArt.datos.forEach(a => {
+      listaArticulos.forEach(a => {
         const texto = `${a.codigo} - ${a.descripcion}`;
+        
+        // Mapeo por formato completo, código original y código en mayúsculas
         catalogoArticulosMap[texto] = a;
         catalogoArticulosMap[a.codigo] = a;
-        htmlArt += `<option value="${texto}">$ ${a.precio_venta || a.precio || 0}</option>`;
+        catalogoArticulosMap[a.codigo.toUpperCase()] = a;
+
+        const precioEntero = Math.round(a.precio_venta || a.precio || 0);
+        htmlArt += `<option value="${texto}">$ ${precioEntero}</option>`;
       });
       dlArticulos.innerHTML = htmlArt;
     }
 
-    // Conceptos de Venta
+    // 🟢 C. Conceptos de Venta
     const resConc = await fetch('/api/pedidos/conceptos-ventas');
     const dataConc = await resConc.json();
     const selectConc = getModalEl('select_item_concepto');
+    const listaConceptos = dataConc.datos || dataConc.dato || (Array.isArray(dataConc) ? dataConc : []);
 
-    if (selectConc && dataConc.success && Array.isArray(dataConc.datos)) {
+    if (selectConc && dataConc.success && Array.isArray(listaConceptos)) {
       let htmlConc = '<option value="">-- Seleccionar Concepto --</option>';
-      dataConc.datos.forEach(c => {
+      listaConceptos.forEach(c => {
         htmlConc += `<option value="${c.codigo}">${c.codigo} - ${c.descripcion}</option>`;
       });
       selectConc.innerHTML = htmlConc;
@@ -616,7 +702,7 @@ async function cargarPedidos(buscar = '') {
   }
 }
 
-// 4. Renderizar Grilla Interna del Modal
+// 4. Renderizar Grilla Interna del Modal con Cantidad Editable
 function renderizarDetallePedido() {
   const tbody = document.getElementById('tbodyPedidoDetalle');
   const lblTotal = document.getElementById('lblTotalPedido');
@@ -645,7 +731,14 @@ function renderizarDetallePedido() {
       <tr>
         <td class="align-middle">${badgeTipo}</td>
         <td class="align-middle fw-semibold">${item.descripcion}</td>
-        <td class="align-middle text-end fw-bold">${item.cantidad}</td>
+        <td class="align-middle text-center" style="width: 95px;">
+          <input type="number" 
+                 class="form-control form-control-sm text-center fw-bold px-1" 
+                 value="${item.cantidad}" 
+                 min="1" 
+                 onchange="actualizarCantidadItemDetalle(${index}, this.value)"
+                 onkeydown="if(event.key==='Enter'){ event.preventDefault(); this.blur(); }">
+        </td>
         <td class="align-middle text-end">$ ${precioFmt}</td>
         <td class="align-middle text-end fw-bold text-success">$ ${subtotalFmt}</td>
         <td class="text-center align-middle">
@@ -696,6 +789,23 @@ async function abrirModalCrearPedido() {
 function quitarItemADetalle(index) {
   itemsDetallePedido.splice(index, 1);
   renderizarDetallePedido();
+}
+
+// 🟢 Actualizar cantidad de un ítem directamente desde la grilla
+function actualizarCantidadItemDetalle(index, nuevaCantidad) {
+  const cant = parseInt(nuevaCantidad, 10);
+  
+  // Si ingresa un valor inválido o menor a 1, se restablaece la cantidad original
+  if (isNaN(cant) || cant <= 0) {
+    renderizarDetallePedido();
+    return;
+  }
+
+  if (itemsDetallePedido[index]) {
+    itemsDetallePedido[index].cantidad = cant;
+    itemsDetallePedido[index].total = cant * itemsDetallePedido[index].precio_unit;
+    renderizarDetallePedido();
+  }
 }
 
 // 8. Cargar Pedido para Edición
@@ -924,4 +1034,4 @@ window.cotizarItemPedido = cotizarItemPedido;
 window.cotizarPrecioArticuloPedido = cotizarPrecioArticuloPedido;
 window.procesarSeleccionClienteDirecto = procesarSeleccionClienteDirecto;
 window.habilitarNavegacionEnterModal = habilitarNavegacionEnterModal;
-window.imprimirPedidoPDF = imprimirPedidoPDF;
+window.imprimirPedidoPDF = imprimirPedidoPDF;window.actualizarCantidadItemDetalle = actualizarCantidadItemDetalle;

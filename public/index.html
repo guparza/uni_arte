@@ -463,13 +463,21 @@
                 <input type="hidden" id="item_articulo">
               </div>
 
-              <!-- Contenedor para Concepto (Oculto por defecto) -->
-              <div class="col-md-5 d-none" id="div_concepto_input">
-                <label class="form-label fw-bold small mb-1">Concepto de Venta</label>
-                <select class="form-select form-select-sm" id="select_item_concepto">
-                  <option value="">-- Seleccionar Concepto --</option>
-                </select>
-              </div>
+             <!-- Contenedor para Concepto con botón de gestión ⚙️ -->
+<div class="col-md-5 d-none" id="div_concepto_input">
+  <label class="form-label fw-bold small mb-1">Concepto de Venta</label>
+  <div class="input-group input-group-sm">
+    <select class="form-select form-select-sm" id="select_item_concepto">
+      <option value="">-- Seleccionar Concepto --</option>
+    </select>
+    <button type="button" 
+            class="btn btn-outline-secondary" 
+            title="Gestionar Conceptos de Venta" 
+            onclick="abrirModalConceptos()">
+      ⚙️
+    </button>
+  </div>
+</div>
 
               <div class="col-md-2">
                 <label class="form-label fw-bold small mb-1">Precio Unit ($)</label>
@@ -527,6 +535,50 @@
       </div>
     </div>
   </div>
+
+<!-- Modal de Gestión de Conceptos de Venta (Pegar en index.html) -->
+<div class="modal fade" id="modalConceptos" tabindex="-1" aria-labelledby="modalConceptosLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white py-2">
+        <h5 class="modal-title" id="modalConceptosLabel">⚙️ Gestión de Conceptos de Venta</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="alertaConceptosModal"></div>
+
+        <form id="formConcepto" class="row g-2 mb-3 bg-light p-2 border rounded" onsubmit="guardarConcepto(event)">
+          <div class="col-md-3">
+            <label class="form-label small fw-bold">Código</label>
+            <input type="number" id="concepto_codigo" class="form-control form-control-sm" placeholder="Ej: 999" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Descripción</label>
+            <input type="text" id="concepto_descripcion" class="form-control form-control-sm text-uppercase" placeholder="Ej: TRABAJO ESPECIAL" required>
+          </div>
+          <div class="col-md-3 d-flex align-items-end gap-1">
+            <button type="submit" class="btn btn-sm btn-success w-100 fw-bold" id="btnGuardarConcepto">➕ Guardar</button>
+            <button type="button" class="btn btn-sm btn-secondary d-none" id="btnCancelarConcepto" onclick="cancelarEdicionConcepto()">❌</button>
+          </div>
+        </form>
+
+        <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+          <table class="table table-sm table-hover table-striped align-middle mb-0">
+            <thead class="table-dark sticky-top">
+              <tr>
+                <th style="width: 15%;">Código</th>
+                <th>Descripción</th>
+                <th style="width: 20%;" class="text-end">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyConceptos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 🖼️ VISTA DE CATÁLOGO VISUAL -->
 <div id="seccionCatalogo" class="d-none">
   <div class="container-fluid my-3 px-4">
@@ -640,5 +692,6 @@
   <script src="/js/clientes.js"></script>
   <script src="/js/pedidos.js"></script>
   <script src="/js/catalogo.js"></script>
+  <script src="/js/conceptos.js"></script>
 </body>
 </html>

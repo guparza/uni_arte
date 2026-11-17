@@ -366,17 +366,94 @@ router.get('/:control/pdf', async (req, res) => {
       <head>
         <meta charset="UTF-8">
         <title>Pedido #${pedido.control} - UniArte</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 30px; color: #333; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0d6efd; padding-bottom: 10px; margin-bottom: 20px; }
-          .title { font-size: 24px; font-weight: bold; color: #0d6efd; }
-          .info-box { background: #f8f9fa; padding: 12px; border-radius: 5px; margin-bottom: 20px; display: flex; justify-content: space-between; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th { background: #0d6efd; color: white; padding: 10px; text-align: left; font-size: 14px; }
-          .total-box { text-align: right; font-size: 18px; font-weight: bold; margin-top: 15px; color: #198754; }
-          .obs-box { margin-top: 25px; padding: 10px; border: 1px dashed #ccc; background: #fffbe6; border-radius: 5px; }
+       <style>
+          /* 🟢 Base compacta para impresión (12px) */
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            color: #333; 
+            font-size: 12px; 
+            line-height: 1.4;
+          }
+          
+          .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 2px solid #0d6efd; 
+            padding-bottom: 8px; 
+            margin-bottom: 15px; 
+          }
+          
+          /* Título UniArte reducido de 24px a 18px */
+          .title { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #0d6efd; 
+          }
+
+          /* Título de número de pedido reducido de 24px a 16px */
+          .header h2 {
+            margin: 0;
+            font-size: 16px;
+            color: #333;
+          }
+
+          .info-box { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            border-radius: 5px; 
+            margin-bottom: 15px; 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 14px;
+          }
+          
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 15px; 
+          }
+
+          /* Encabezados de la tabla reducidos de 14px a 11px */
+          th { 
+            background: #0d6efd; 
+            color: white; 
+            padding: 6px 8px; 
+            text-align: left; 
+            font-size: 12px; 
+            text-transform: uppercase;
+          }
+
+          /* Filas del detalle con padding compacto */
+          td {
+            padding: 6px 8px;
+            border-bottom: 1px solid #ddd;
+            font-size: 12px;
+          }
+
+          /* Total del pedido reducido de 18px a 14px */
+          .total-box { 
+            text-align: right; 
+            font-size: 16px; 
+            font-weight: bold; 
+            margin-top: 10px; 
+            color: #198754; 
+          }
+
+           .obs-box { 
+          margin-top: 15px; 
+          padding: 8px 12px; 
+          border: 1px dashed #ccc; 
+          background: #fffbe6; 
+          border-radius: 5px; 
+          font-size: 11px;
+          line-height: 1.4;
+        }
+          
           @media print {
             .btn-imprimir { display: none; }
+            body { margin: 10mm; }
           }
         </style>
       </head>
@@ -389,7 +466,7 @@ router.get('/:control/pdf', async (req, res) => {
         <div class="header">
           <div>
             <div class="title">🎨 UniArte</div>
-            <small>Comprobante de Orden de Pedido</small>
+            <h2>Comprobante de Orden de Pedido</h2>
           </div>
           <div style="text-align: right;">
             <h2 style="margin: 0; color: #333;">PEDIDO #${pedido.control}</h2>
@@ -426,10 +503,10 @@ router.get('/:control/pdf', async (req, res) => {
           TOTAL PEDIDO: $ ${totalFmt}
         </div>
 
-        ${pedido.obs ? `
+         ${pedido.obs ? `
           <div class="obs-box">
             <strong>Observaciones de Trabajo:</strong><br>
-            ${pedido.obs}
+            ${pedido.obs.trim().replace(/\n/g, '<br>')}
           </div>
         ` : ''}
       </body>
